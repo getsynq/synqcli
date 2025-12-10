@@ -68,11 +68,157 @@ synqcli deploy --client-id="your-id" --client-secret="your-secret" --api-url="ht
 
 ### Advisor Credentials
 
-For the `advisor` command, you also need an OpenAI-compatible API key:
+For the `advisor` command, you need an OpenAI-compatible API key or AWS Bedrock credentials:
 
+**OpenAI (default):**
 ```bash
 export OPENAI_API_KEY="your-api-key"
-export OPENAI_BASE_URL="https://api.openai.com/v1"  # optional, for custom endpoints like LiteLLM
+```
+
+**Custom endpoint (LiteLLM, Azure, etc.):**
+```bash
+export OPENAI_API_KEY="your-api-key"
+export OPENAI_BASE_URL="https://your-endpoint.com/v1"
+```
+
+**AWS Bedrock (direct):**
+
+To use Claude models hosted on AWS Bedrock directly:
+
+```bash
+# Set the Bedrock model ID (required for Bedrock)
+export AWS_BEDROCK_MODEL_ID="anthropic.claude-sonnet-4-20250514-v1:0"
+
+# Set the AWS region (optional, defaults to us-east-1)
+export AWS_REGION="us-east-1"
+
+# AWS credentials are loaded from the standard AWS credential chain:
+# - Environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN)
+# - Shared credentials file (~/.aws/credentials)
+# - IAM roles (when running on AWS infrastructure)
+```
+
+Example usage:
+```bash
+AWS_BEDROCK_MODEL_ID="anthropic.claude-sonnet-4-20250514-v1:0" \
+AWS_REGION="us-east-1" \
+  synqcli advisor \
+  --entity-id "postgres::public::users" \
+  --instructions "Suggest data quality tests"
+```
+
+Available Bedrock Claude models:
+- `anthropic.claude-sonnet-4-20250514-v1:0` (Claude Sonnet 4)
+- `anthropic.claude-3-5-sonnet-20241022-v2:0` (Claude 3.5 Sonnet v2)
+- `anthropic.claude-3-5-sonnet-20240620-v1:0` (Claude 3.5 Sonnet)
+- `anthropic.claude-3-haiku-20240307-v1:0` (Claude 3 Haiku)
+
+### DWH Connection (Optional)
+
+For enhanced test suggestions with data profiling, configure a database connection:
+
+**Via environment variables:**
+```bash
+export DWH_TYPE="postgres"           # postgres, mysql, bigquery, snowflake, clickhouse, redshift, databricks
+export DWH_HOST="localhost"
+export DWH_PORT="5432"
+export DWH_DATABASE="mydb"
+export DWH_USERNAME="user"
+export DWH_PASSWORD="pass"
+```
+
+**Via connections file:**
+```yaml
+# connections.yaml
+- id: my-postgres
+  type: postgres
+  host: localhost
+  port: 5432
+  database: mydb
+  username: user
+  password: pass
+```
+
+#### Snowflake Configuration
+
+Snowflake supports multiple authentication methods:
+
+**Password authentication:**
+```yaml
+# connections.yaml
+- id: my-snowflake
+  type: snowflake
+  account: myaccount.us-east-1     # Account identifier (with region if needed)
+  warehouse: COMPUTE_WH
+  role: ANALYST
+  username: myuser
+  password: mypassword
+  databases: ["PROD", "DEV"]       # Optional: limit to specific databases
+  use_get_ddl: true                # Optional: use GET_DDL for view definitions
+```
+
+**Private key authentication:**
+```yaml
+# connections.yaml
+- id: my-snowflake-key
+  type: snowflake
+  account: myaccount.us-east-1
+  warehouse: COMPUTE_WH
+  role: ANALYST
+  username: myuser
+  private_key_file: /path/to/rsa_key.p8
+  private_key_passphrase: optional-passphrase  # If key is encrypted
+  databases: ["PROD"]
+```
+
+**SSO/Browser authentication (externalbrowser):**
+
+For organizations using SSO (Okta, Azure AD, etc.), use browser-based authentication:
+
+```yaml
+# connections.yaml
+- id: my-snowflake-sso
+  type: snowflake
+  account: myaccount.us-east-1
+  warehouse: COMPUTE_WH
+  role: ANALYST
+  username: myuser@company.com     # Your SSO username/email
+  auth_type: externalbrowser       # Triggers browser-based SSO
+  databases: ["PROD"]
+```
+
+Or via environment variables:
+```bash
+export DWH_TYPE="snowflake"
+export DWH_ACCOUNT="myaccount.us-east-1"
+export DWH_WAREHOUSE="COMPUTE_WH"
+export DWH_ROLE="ANALYST"
+export DWH_USERNAME="myuser@company.com"
+export DWH_AUTH_TYPE="externalbrowser"
+```
+
+**How SSO authentication works:**
+1. First connection opens your default browser for SSO login
+2. After successful login, the ID token is cached in your OS credential manager:
+   - macOS: Keychain
+   - Windows: Credential Manager
+   - Linux: File-based (requires explicit opt-in)
+3. Subsequent connections reuse the cached token (valid for ~4 hours)
+4. When token expires, browser opens again for re-authentication
+
+**Requirements for SSO:**
+- Your Snowflake account must have ID token caching enabled:
+  ```sql
+  ALTER ACCOUNT SET ALLOW_ID_TOKEN = TRUE;
+  ```
+- Your organization's IdP must be configured in Snowflake
+
+Example usage with SSO:
+```bash
+synqcli advisor \
+  --entity-id "snowflake::PROD::ANALYTICS::ORDERS" \
+  --instructions "Suggest data quality tests" \
+  --connections ./connections.yaml
 ```
 
 ---
@@ -146,9 +292,10 @@ synqcli advisor [flags]
 #### How It Works
 
 1. **Fetch Context** - Retrieves table schema, existing checks, and code from SYNQ
-2. **Analyze** - AI analyzes the schema and generates appropriate test suggestions
-3. **Output** - Returns JSON (default) or writes YAML files to specified directory
-4. **Deploy** - Optionally deploys generated tests immediately
+2. **Profile Data** (optional) - If DWH connection is configured, profiles columns to discover actual values, min/max bounds, and null rates
+3. **Analyze** - AI analyzes the schema (and profiling results) to generate appropriate test suggestions
+4. **Output** - Returns JSON (default) or writes YAML files to specified directory
+5. **Deploy** - Optionally deploys generated tests immediately
 
 #### Examples
 
@@ -194,6 +341,41 @@ synqcli advisor \
   --instructions "Suggest tests" \
   --output ./tests \
   --force
+
+# With DWH connection for data profiling (discovers actual values)
+synqcli advisor \
+  --entity-id "postgres::public::users" \
+  --instructions "Suggest accepted_values tests for enum-like columns" \
+  --connections ./connections.yaml \
+  --output ./tests
+
+# DWH connection via environment variables
+DWH_TYPE=postgres DWH_HOST=localhost DWH_DATABASE=mydb \
+  synqcli advisor \
+  --entity-id "postgres::public::users" \
+  --instructions "Suggest min/max tests based on actual data ranges"
+
+# Verbose mode to see AI reasoning and tool calls
+synqcli advisor \
+  --entity-id "postgres::public::users" \
+  --instructions "Suggest tests" \
+  --connections ./connections.yaml \
+  --verbose
+
+# Filter suggestions to specific columns (comma-separated)
+synqcli advisor \
+  --entity-id "postgres::public::users" \
+  --columns "status,email,role" \
+  --instructions "Suggest accepted_values tests for these columns"
+
+# Filter to specific columns (multiple flags)
+synqcli advisor \
+  --entity-id "postgres::public::orders" \
+  --columns status \
+  --columns priority \
+  --columns region \
+  --instructions "Suggest tests for these enum-like columns" \
+  --output ./tests
 ```
 
 #### Flags
@@ -201,6 +383,7 @@ synqcli advisor \
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--entity-id` | `-e` | Entity ID (table FQN) to suggest tests for (can be repeated) |
+| `--columns` | `-C` | Filter suggestions to specific columns (comma-separated or repeated) |
 | `--instructions` | `-i` | Instructions for what tests to suggest |
 | `--instructions-file` | `-I` | Path to file containing instructions |
 | `--output` | `-o` | Output directory for generated YAML files |
@@ -209,6 +392,8 @@ synqcli advisor \
 | `--force` | `-f` | Overwrite existing YAML files |
 | `--deploy` | | Deploy generated files after creation |
 | `--auto-confirm` | | Skip confirmation prompts during deployment |
+| `--connections` | `-c` | Path to DWH connections YAML file for data profiling |
+| `--verbose` | `-v` | Show detailed output including AI reasoning and tool calls |
 
 ---
 
@@ -278,6 +463,7 @@ entities:
   - id: postgres::public::users
     tests:
       - type: not_null
+        description: Ensure critical user identifiers are always present
         columns: [user_id, email]
     monitors:
       - type: automated
@@ -307,6 +493,7 @@ entities:
     tests:
       # Ensure critical columns are never null
       - type: not_null
+        description: Order ID, customer ID and total amount are required for all orders
         columns:
           - order_id
           - customer_id
@@ -314,20 +501,24 @@ entities:
 
       # Ensure order_id is unique
       - type: unique
+        description: Each order must have a unique identifier
         columns: [order_id]
 
       # Validate status values
       - type: accepted_values
+        description: Order status must be one of the valid workflow states
         column: status
         values: [pending, processing, shipped, delivered, cancelled]
 
       # Ensure amounts are positive
       - type: min_value
+        description: Order amounts cannot be negative
         column: total_amount
         min_value: 0
 
       # Business rule: ship_date must be after order_date
       - type: relative_time
+        description: Ship date must be on or after order date
         column: ship_date
         relative_column: order_date
 
@@ -355,12 +546,15 @@ entities:
   - id: bq-prod.dataset.customers
     tests:
       - type: not_null
+        description: Customer ID and email are required for all customers
         columns: [customer_id, email]
 
       - type: unique
+        description: Email addresses must be unique across all customers
         columns: [email]
 
       - type: business_rule
+        description: Updated timestamp must be on or after creation timestamp
         sql_expression: "created_at <= updated_at"
 ```
 
@@ -393,6 +587,7 @@ Ensures specified columns do not contain null values.
 
 ```yaml
 - type: not_null
+  description: Critical user fields must always have values
   columns:
     - user_id
     - email
@@ -405,6 +600,7 @@ Ensures specified columns are not empty strings.
 
 ```yaml
 - type: empty
+  description: Description and notes should contain meaningful content when present
   columns:
     - description
     - notes
@@ -417,16 +613,19 @@ Ensures column values are unique, optionally within a time window.
 ```yaml
 # Simple unique check
 - type: unique
+  description: Order ID must be unique across all orders
   columns: [order_id]
 
 # Composite unique key
 - type: unique
+  description: Customer can only have one order per day
   columns:
     - customer_id
     - order_date
 
 # Unique within time window (e.g., last 30 days)
 - type: unique
+  description: Transaction IDs must be unique within rolling 30-day window
   columns: [transaction_id]
   time_partition_column: created_at
   time_window_seconds: 2592000  # 30 days
@@ -439,6 +638,7 @@ Ensures column values are within a predefined list of acceptable values.
 ```yaml
 # String values
 - type: accepted_values
+  description: Account status must be a valid lifecycle state
   column: status
   values:
     - active
@@ -447,6 +647,7 @@ Ensures column values are within a predefined list of acceptable values.
 
 # Numeric values
 - type: accepted_values
+  description: Priority must be between 1 (highest) and 5 (lowest)
   column: priority
   values: [1, 2, 3, 4, 5]
 ```
@@ -457,6 +658,7 @@ Ensures column values are NOT in a predefined list of blocked values.
 
 ```yaml
 - type: rejected_values
+  description: Error codes must not contain placeholder or invalid values
   column: error_code
   values:
     - -1
@@ -471,17 +673,20 @@ Ensures column values are greater than or equal to a minimum value.
 ```yaml
 # Numeric minimum
 - type: min_value
+  description: Users must be at least 18 years old
   column: age
   min_value: 18
 
 # Strict comparison (greater than, not equal)
 - type: min_value
+  description: Quantity must be positive (greater than zero)
   column: quantity
   min_value: 0
   strictly: true
 
 # Date minimum
 - type: min_value
+  description: Start date must be in 2024 or later
   column: start_date
   min_value: "2024-01-01"
 ```
@@ -493,11 +698,13 @@ Ensures column values are less than or equal to a maximum value.
 ```yaml
 # Numeric maximum
 - type: max_value
+  description: Product price cannot exceed maximum allowed price
   column: price
   max_value: 1000.99
 
 # Use SQL expression (e.g., no future dates)
 - type: max_value
+  description: Created timestamp cannot be in the future
   column: created_at
   max_value:
     type: expression
@@ -512,18 +719,21 @@ Ensures column values fall within a specified range.
 ```yaml
 # Numeric range
 - type: min_max
+  description: Percentage values must be between 0 and 100
   column: percentage
   min_value: 0
   max_value: 100
 
 # Date range
 - type: min_max
+  description: Event dates must fall within the 2024 calendar year
   column: event_date
   min_value: "2024-01-01"
   max_value: "2024-12-31"
 
 # Temperature range
 - type: min_max
+  description: Temperature readings must be within valid sensor range
   column: temperature
   min_value: -40
   max_value: 120
@@ -535,6 +745,7 @@ Ensures data is updated within a specified time window.
 
 ```yaml
 - type: freshness
+  description: Table should be updated at least every 2 hours
   time_partition_column: updated_at
   time_window_seconds: 7200  # 2 hours
 ```
@@ -545,10 +756,12 @@ Ensures temporal relationships between columns (e.g., end_date >= start_date).
 
 ```yaml
 - type: relative_time
+  description: Ship date must be on or after order date
   column: ship_date
   relative_column: order_date
 
 - type: relative_time
+  description: End time must be after start time
   column: end_time
   relative_column: start_time
 ```
@@ -560,14 +773,17 @@ Validates custom SQL expressions that represent business logic. The expression s
 ```yaml
 # Accounting equation must balance
 - type: business_rule
+  description: Assets must equal liabilities plus equity (accounting equation)
   sql_expression: "assets = liabilities + equity"
 
 # Discount cannot exceed total
 - type: business_rule
+  description: Discount amount cannot exceed order total
   sql_expression: "discount_amount <= total_amount"
 
 # Complex validation
 - type: business_rule
+  description: Shipped orders must have a ship date
   sql_expression: "status = 'shipped' AND ship_date IS NOT NULL OR status != 'shipped'"
 ```
 
