@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=https://schemas.synq.io/synq-monitors/v1/config.schema.json
+
+version: v1beta2
+namespace: financial_data
+
+defaults:
+  severity: ERROR
+
+entities:
+  - id: bq-synq-demo.nyc_taxi.financial_statement
+    time_partitioning_column: month
+
+    monitors:
+      - id: freshness_financial_statement
+        type: freshness
+        expression: month
+
+      - id: volume_financial_statement
+        type: volume
+
+      - id: stats_financial_statement
+        type: field_stats
+        columns:
+          - total_revenue
+          - total_tips
+        mode:
+          anomaly_engine:
+            sensitivity: BALANCED
+
+      - id: custom_financial_statement_revenue_nonnegative
+        type: custom_numeric
+        metric_aggregation: MIN(total_revenue)
+        mode:
+          fixed_thresholds:
+            min: 0
+
+  # category_distribution is v1beta2-only (no v1beta1 equivalent).
+  - id: bq-synq-demo.nyc_taxi.transactions
+    time_partitioning_column: created_at
+
+    monitors:
+      - id: category_distribution_transaction_type
+        type: category_distribution
+        column: transaction_type
+        top_k_limit: 10
+

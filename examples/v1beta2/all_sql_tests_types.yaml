@@ -1,0 +1,158 @@
+# Example SQL tests configuration demonstrating all supported test types
+# yaml-language-server: $schema=https://schemas.synq.io/synq-monitors/v1/config.schema.json
+
+version: v1beta2
+namespace: financial_data
+
+entities:
+  - id: ch-prod.default.financial_statement
+    tests:
+      # Not null test with multiple columns
+      - type: not_null
+        columns:
+          - total_revenue
+          - total_tips
+        select_columns: [id, total_revenue, region]
+
+      # Unique test with time window
+      - type: unique
+        columns:
+          - month
+        time_partition_column: created_at
+        time_window_seconds: 86400
+
+      # Accepted values test with quoted string values
+      - type: accepted_values
+        column: statement
+        values:
+          - income_statement
+          - balance_sheet
+          - cash_flow_statement
+
+      # Accepted values test with numeric values
+      - type: accepted_values
+        column: status_code
+        values:
+          - 200
+          - 201
+          - 404
+          - 500
+
+      # Rejected values test with numeric values
+      - type: rejected_values
+        column: error_code
+        values:
+          - -1
+          - 0
+          - 999
+
+      # Min/Max test with numeric values
+      - type: min_max
+        column: temperature
+        min_value: -40
+        max_value: 120
+        select_columns: [id, temperature, recorded_at]
+
+      # Min/Max test with string literals (dates)
+      - type: min_max
+        column: date_range
+        min_value: "2024-01-01"
+        max_value: "2024-12-31"
+
+      # Min value test with numeric value
+      - type: min_value
+        column: age
+        min_value: 18
+        strictly: true
+
+      # Min value test with string literal (date)
+      - type: min_value
+        column: start_date
+        min_value: "2024-01-01"
+
+      # Max value test with expression (e.g., ensure created_at is not in the future)
+      - type: max_value
+        column: created_at
+        max_value:
+          type: expression
+          value: NOW()
+        strictly: true
+
+      # Max value test with numeric value
+      - type: max_value
+        column: price
+        max_value: 1000.99
+        strictly: false
+
+      # Freshness test
+      - type: freshness
+        time_partition_column: updated_at
+        time_window_seconds: 7200
+
+      # Relative time test
+      - type: relative_time
+        column: ship_date
+        relative_column: order_date
+
+      # Business rule test
+      - type: business_rule
+        sql_expression: "assets = liabilities + equity"
+
+      # Business query test with evaluators: sql_query produces rows (grouped metrics),
+      # each evaluator checks a named threshold condition against the computed columns.
+      - type: business_query
+        id: revenue-metrics-by-region
+        name: Daily revenue metrics per region
+        sql_query: |
+          SELECT
+            region,
+            COUNT(*)                                    AS statement_count,
+            SUM(total_revenue)                          AS total_revenue,
+            AVG(total_tips / NULLIF(total_revenue, 0)) AS avg_tip_rate
+          FROM financial_statement
+          WHERE date = CURRENT_DATE
+          GROUP BY region
+        evaluators:
+          - id: min-statements-per-region
+            name: Each region must have at least 5 statements
+            sql_expression: "statement_count < 5"
+            severity: WARNING
+          - id: negative-regional-revenue
+            name: Total revenue per region must not be negative
+            sql_expression: "total_revenue < 0"
+            severity: ERROR
+          - id: tip-rate-too-high
+            name: Average tip rate must not exceed 30%
+            sql_expression: "avg_tip_rate > 0.30"
+            severity: WARNING
+
+      # Empty test
+      - type: empty
+        columns:
+          - description
+
+      # Relationships test - single reference
+      - type: relationships
+        references:
+          - entity: ch-prod.default.tenants
+            columns:
+              - source: tenant_id
+                reference: id
+
+      # Relationships test - multiple references with all options
+      - type: relationships
+        references:
+          - entity: ch-prod.default.tenants
+            columns:
+              - source: tenant_id
+                reference: id
+          - entity: ch-prod.default.users
+            columns:
+              - source: user_id
+                reference: id
+              - source: tenant_id
+                reference: tenant_id
+        ignore_nulls: true
+        time_partition_column: created_at
+        time_window_seconds: 86400
+        select_columns: [id, tenant_id, user_id]

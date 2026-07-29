@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://schemas.synq.io/synq-monitors/v1/config.schema.json
+#
+# CustomTableStatsMonitor.freshness_source — pick how the monitor extracts
+# the "last loaded" timestamp:
+#   field: name of a single timestamp column
+#   sql:   a SQL expression returning a timestamp (generator wraps with MAX)
+#
+# Round-trip regression guard for PR-21737 — before that PR FreshnessSource
+# was silently dropped on export.
+
+version: v1beta2
+namespace: freshness-source
+
+entities:
+  - id: ch-prod.default.events
+    monitors:
+      # Simple field reference.
+      - id: events_freshness_via_field
+        type: custom_table_stats
+        sensitivity: BALANCED
+        metrics:
+          - DELAY
+        freshness_source:
+          field: updated_at
+
+      # Expression — falls back to created_at when updated_at is null.
+      # Generator wraps as MAX(COALESCE(updated_at, created_at)).
+      - id: events_freshness_via_expression
+        type: custom_table_stats
+        sensitivity: BALANCED
+        metrics:
+          - DELAY
+        freshness_source:
+          sql: "COALESCE(updated_at, created_at)"

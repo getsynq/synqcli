@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=https://schemas.synq.io/synq-monitors/v1/config.schema.json
+#
+# Per-monitor sql_source — provide a row-yielding SELECT (CTE wrapped as
+# `WITH monitor_source AS (...)`). Monitor computes its metric (volume,
+# freshness, custom_numeric) on the CTE result, NOT on the pre-aggregated
+# SQL. Use to scope the monitor to a filtered subset of a table.
+#
+# Round-trip regression guard for PR-21737 — before that PR the SqlSource
+# field was silently dropped on export.
+
+version: v1beta2
+namespace: sql-source
+
+entities:
+  # Volume of COMPLETED orders only — sql_source filters by status; the
+  # monitor counts rows of the resulting CTE.
+  - id: ch-prod.default.orders
+    time_partitioning_column: created_at
+    monitors:
+      - id: volume_completed_orders
+        type: volume
+        sql_source: "SELECT created_at, country, amount FROM orders WHERE status = 'completed'"
+
+  # Freshness of sync events only — ignores other event types.
+  - id: ch-prod.default.events
+    time_partitioning_column: updated_at
+    monitors:
+      - id: freshness_sync_events
+        type: freshness
+        expression: updated_at
+        sql_source: "SELECT updated_at FROM events WHERE event_type = 'sync'"
+
+  # Sum of refund amounts — custom_numeric aggregates `amount` over the
+  # filtered CTE.
+  - id: ch-prod.default.payments
+    time_partitioning_column: created_at
+    monitors:
+      - id: custom_numeric_refund_total
+        type: custom_numeric
+        metric_aggregation: "sum(amount)"
+        sql_source: "SELECT created_at, amount FROM payments WHERE type = 'refund'"

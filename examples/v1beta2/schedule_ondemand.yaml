@@ -1,0 +1,31 @@
+# Example SQL tests configuration demonstrating all supported test types
+# yaml-language-server: $schema=https://schemas.synq.io/synq-monitors/v1/config.schema.json
+
+version: v1beta2
+namespace: zdenal2
+defaults:
+  schedule: ondemand
+
+entities:
+  - id: default.runs
+    time_partitioning_column: created_at
+    monitors:
+      - type: volume
+        schedule:
+          type: ondemand
+          time_partitioning_interval: 24h
+  - id: default.synq_sql_test__audit
+    time_partitioning_column: created_at
+    tests:
+      # Not null test with multiple columns
+      - type: not_null
+        columns:
+          - sql_test_path
+    monitors:
+      - type: volume
+        mode:
+          anomaly_engine:
+            sensitivity: PRECISE
+        schedule:
+          type: ondemand
+          time_partitioning_interval: 1h

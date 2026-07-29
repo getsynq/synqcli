@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://schemas.synq.io/synq-monitors/v1/config.schema.json
+#
+# custom_table_stats monitors track table-level statistics (row count, column
+# null rates, etc.) as custom monitors managed via the CustomMonitorsService.
+#
+# This is distinct from the automated table_stats monitor (which uses the
+# DeploymentRulesService and requires specifying metrics explicitly).
+
+version: v1beta2
+namespace: custom-table-stats
+
+
+entities:
+  - id: ch-prod.default.runs
+    monitors:
+      # Minimal usage: no metrics specified, all metrics monitored (backwards-compatible)
+      - id: table_stats_runs
+        type: custom_table_stats
+        schedule: hourly
+        mode:
+          anomaly_engine:
+            sensitivity: BALANCED
+
+      # With explicit metrics using shorthand string (uses monitor-level sensitivity)
+      - id: table_stats_runs_with_metrics
+        type: custom_table_stats
+        sensitivity: BALANCED
+        metrics:
+          - ROW_COUNT
+          - DELAY
+
+      # With per-metric sensitivity override
+      - id: table_stats_runs_per_metric_sensitivity
+        type: custom_table_stats
+        sensitivity: BALANCED
+        metrics:
+          - ROW_COUNT
+          - metric: DELAY
+            sensitivity: PRECISE
+          - VOLUME_CHANGE_DELAY

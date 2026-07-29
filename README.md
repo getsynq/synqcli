@@ -1,12 +1,20 @@
-# SYNQ CLI
+# Coalesce Quality CLI (`synqcli`)
 
-Command-line tool for managing data quality tests and monitors on the [SYNQ](https://synq.io) platform.
+Command-line tool for managing data quality tests, monitors and deployment rules on
+[Coalesce Quality](https://synq.io).
 
 ## Features
 
-- **Deploy** - Deploy data quality tests and monitors from YAML configuration files
+- **Deploy** - Deploy data quality tests, monitors and deployment rules from YAML configuration files
 - **Advisor** - Get AI-powered suggestions for data quality tests based on your schema
-- **Export** - Export existing monitors to YAML format
+- **Export** - Export existing monitors, tests and deployment rules to YAML format
+
+Reference documentation:
+
+- [Every command and flag](https://docs.synq.io/monitors/cli), generated from this CLI
+- [The YAML configuration format](https://schemas.synq.io/synq-monitors/v1/config.schema.json), field by field ([rendered](https://schemas.synq.io/synq-monitors/v1/config.html))
+- [Defining monitors in code](https://docs.synq.io/monitors/monitors-as-code) and [SQL tests](https://docs.synq.io/monitors/sql-tests) on the documentation site
+- [`README_SQL_TESTS.md`](README_SQL_TESTS.md) for the SQL-test YAML in depth
 
 ## Installation
 
@@ -40,31 +48,48 @@ Download the latest release from the [releases page](https://github.com/getsynq/
 
 ## Configuration
 
-### SYNQ API Credentials
+### API Credentials
 
-Set your SYNQ API credentials via environment variables:
+For interactive use, log in through the browser once:
 
 ```bash
-export SYNQ_CLIENT_ID="your-client-id"
-export SYNQ_CLIENT_SECRET="your-client-secret"
-export SYNQ_API_URL="https://developer.synq.io"  # or https://api.us.synq.io for US region
+synqcli auth login             # EU, the default deployment
+synqcli auth login --region us # or au
+synqcli auth status
+```
+
+The credential is cached under `~/.synq/oauth/` and shared with the other Coalesce
+Quality CLIs, so later commands need no flag — the login records which deployment it
+authenticated against.
+
+For CI, set client credentials via environment variables:
+
+```bash
+export QUALITY_CLIENT_ID="your-client-id"
+export QUALITY_CLIENT_SECRET="your-client-secret"
+export QUALITY_REGION="eu"     # eu (default), us, or au
 ```
 
 Or create a `.env` file in your project root:
 
 ```bash
-SYNQ_CLIENT_ID=your-client-id
-SYNQ_CLIENT_SECRET=your-client-secret
-SYNQ_API_URL=https://developer.synq.io
+QUALITY_CLIENT_ID=your-client-id
+QUALITY_CLIENT_SECRET=your-client-secret
+QUALITY_REGION=eu
 ```
 
 Or use command-line flags (highest priority):
 
 ```bash
-synqcli deploy --client-id="your-id" --client-secret="your-secret" --api-url="https://developer.synq.io"
+synqcli deploy --client-id="your-id" --client-secret="your-secret" --region=eu
 ```
 
-**Priority order:** Command-line flags > Environment variables > .env file
+Pass `--endpoint` (or `QUALITY_API_ENDPOINT`) instead of `--region` to reach a staging
+or self-hosted deployment.
+
+**Priority order:** client credentials (flags > environment variables > `.env`) > a
+pre-issued `QUALITY_TOKEN` > the cached browser login. The CI paths deliberately win,
+so adding a browser login cannot change what an existing pipeline authenticates as.
 
 ### Advisor Credentials
 
@@ -237,7 +262,7 @@ synqcli deploy [FILES...] [flags]
 
 1. **File Discovery** - If no files specified, discovers all `.yaml` files in current directory
 2. **Parse** - Parses YAML files and converts to API format
-3. **Resolve** - Resolves entity paths using SYNQ path resolution
+3. **Resolve** - Resolves the short entity ids in the YAML to full asset paths
 4. **Preview** - Shows configuration changes and delta (creates, updates, deletes)
 5. **Confirm** - Asks for confirmation (unless `--auto-confirm` is used)
 6. **Deploy** - Applies the configuration changes
@@ -269,15 +294,7 @@ synqcli deploy -p  # prints protobuf messages in JSON format
 
 #### Flags
 
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--auto-confirm` | | Skip confirmation prompts |
-| `--dry-run` | | Preview changes without deploying |
-| `--namespace` | | Only deploy changes for specified namespace |
-| `--client-id` | | SYNQ client ID |
-| `--client-secret` | | SYNQ client secret |
-| `--api-url` | | SYNQ API URL |
-| `--print-protobuf` | `-p` | Print protobuf messages in JSON format |
+`synqcli deploy --help`, or the [CLI reference](https://docs.synq.io/monitors/cli#synqcli-deploy).
 
 ---
 
@@ -291,7 +308,7 @@ synqcli advisor [flags]
 
 #### How It Works
 
-1. **Fetch Context** - Retrieves table schema, existing checks, and code from SYNQ
+1. **Fetch Context** - Retrieves table schema, existing checks, and code from Coalesce Quality
 2. **Profile Data** (optional) - If DWH connection is configured, profiles columns to discover actual values, min/max bounds, and null rates
 3. **Analyze** - AI analyzes the schema (and profiling results) to generate appropriate test suggestions
 4. **Output** - Returns JSON (default) or writes YAML files to specified directory
@@ -380,20 +397,7 @@ synqcli advisor \
 
 #### Flags
 
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--entity-id` | `-e` | Entity ID (table FQN) to suggest tests for (can be repeated) |
-| `--columns` | `-C` | Filter suggestions to specific columns (comma-separated or repeated) |
-| `--instructions` | `-i` | Instructions for what tests to suggest |
-| `--instructions-file` | `-I` | Path to file containing instructions |
-| `--output` | `-o` | Output directory for generated YAML files |
-| `--namespace` | `-n` | Namespace for generated YAML (default: synq-advisor) |
-| `--severity` | `-s` | Default severity for tests/monitors (INFO, WARNING, ERROR) |
-| `--force` | `-f` | Overwrite existing YAML files |
-| `--deploy` | | Deploy generated files after creation |
-| `--auto-confirm` | | Skip confirmation prompts during deployment |
-| `--connections` | `-c` | Path to DWH connections YAML file for data profiling |
-| `--verbose` | `-v` | Show detailed output including AI reasoning and tool calls |
+`synqcli advisor --help`, or the [CLI reference](https://docs.synq.io/monitors/cli#synqcli-advisor).
 
 ---
 
@@ -434,21 +438,38 @@ synqcli export \
   output.yaml
 ```
 
+#### Selective export by resource type
+
+By default `export` writes all three resource types (custom monitors, SQL tests,
+deployment rules). Use `--type` (repeatable) to narrow, or pass an ID-scoped flag and
+the type is inferred automatically.
+
+```bash
+# Only SQL tests
+synqcli export --type=sql-tests generated/tests.yaml
+
+# SQL tests + deployment rules, no custom monitors
+synqcli export --type=sql-tests --type=deployment-rules generated/tests_and_rules.yaml
+
+# One specific test (auto-narrows to --type=sql-tests)
+synqcli export --sql-test=<test-uuid> generated/one_test.yaml
+
+# All monitors plus one specific test (union — explicit --type widens, doesn't restrict)
+synqcli export --type=monitors --sql-test=<test-uuid> generated/mix.yaml
+```
+
+Query-based deployment rules are authoring-only and are never exported; `export`
+writes the single-asset rules only.
+
 #### Flags
 
-| Flag | Description |
-|------|-------------|
-| `--namespace` | Namespace for the exported config (required) |
-| `--monitored` | Filter by monitored asset path (can be repeated) |
-| `--integration` | Filter by integration ID |
-| `--monitor` | Filter by monitor ID |
-| `--source` | Filter by source: `app`, `api`, or `all` (default: `app`) |
+`synqcli export --help`, or the [CLI reference](https://docs.synq.io/monitors/cli#synqcli-export).
 
 ---
 
 ## YAML Configuration Format
 
-SYNQ CLI uses v1beta2 YAML format for defining tests and monitors.
+`synqcli` uses the v1beta2 YAML format for defining tests and monitors.
 
 ### Basic Structure
 
@@ -473,7 +494,7 @@ entities:
 ### Complete Example
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/getsynq/synqcli/main/schema.json
+# yaml-language-server: $schema=https://schemas.synq.io/synq-monitors/v1/config.schema.json
 version: v1beta2
 namespace: data-team-pipeline
 
@@ -563,21 +584,83 @@ entities:
 Reference the JSON schema in your YAML files for IDE autocompletion and validation:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/getsynq/synqcli/main/schema.json
+# yaml-language-server: $schema=https://schemas.synq.io/synq-monitors/v1/config.schema.json
 version: v1beta2
 ```
 
-Generate a local schema file:
+The published schema always describes the current release. To pin the schema to the
+CLI version you deploy with, write it out and reference the local file instead:
 
 ```bash
 synqcli schema > schema.json
 ```
+
+```yaml
+# yaml-language-server: $schema=./schema.json
+version: v1beta2
+```
+
+A rendered, browsable version of the same schema is at
+<https://schemas.synq.io/synq-monitors/v1/config.html>.
+
+---
+
+## Query-based deployment rules
+
+A monitor under an `entities[].id` targets a single asset. To cover many assets by a
+rule instead of listing each one, author query-based deployment rules at the top level
+with a [ResolverQL](https://docs.synq.io/monitors/deployment-rules) selection string —
+the same selection the app and the API expose. New assets that match are covered
+automatically, with no YAML edit.
+
+```yaml
+# yaml-language-server: $schema=https://schemas.synq.io/synq-monitors/v1/config.schema.json
+version: v1beta2
+namespace: "data-team-pipeline"
+
+# Inclusion: deploy monitors to every matching asset (full config).
+deployment_rules:
+  - name: snowflake tables row-count and delay
+    type: table_stats
+    resolver_ql: with_type("table", filter=with_platform("snowflake"))
+    severity: ERROR
+    sensitivity: RELAXED
+    metrics:
+      - ROW_COUNT
+      - DELAY
+
+# Exclusion: carve matching assets OUT of coverage. Only a selection — no
+# metrics/severity/sensitivity (those describe how to monitor, not what to skip).
+deployment_exclusions:
+  - name: exclude staging tables
+    type: table_stats
+    resolver_ql: with_type("table", filter=with_tag("staging"))
+```
+
+Notes:
+
+- `name` is required on every rule and exclusion; it labels the rule in the deploy
+  preview. It does not affect rule identity (that is derived from the selection), so
+  renaming a rule does not create a duplicate.
+- `resolver_ql` is the only selection form supported here. The string is forwarded
+  verbatim; the backend compiles and validates it, so an invalid query fails at deploy
+  time.
+- A query rule authored here and the same `resolver_ql` authored via the API resolve to
+  the same rule, so the two paths converge rather than creating duplicates.
+- Query rules are authoring-only: `export` does not emit them (it writes single-asset
+  `entities` rules). A full example is
+  [`examples/v1beta2/query_deployment_rules.yaml`](examples/v1beta2/query_deployment_rules.yaml).
+- The deploy preview (before confirm, and under `--dry-run`) shows each query rule's
+  downstream effect — how many monitors it will create / delete / change, plus skipped
+  assets. The asset lists are capped; pass `--verbose` to list every affected asset.
 
 ---
 
 ## SQL Tests Reference
 
 SQL tests are data quality validation rules that run SQL queries to check your data.
+[`README_SQL_TESTS.md`](README_SQL_TESTS.md) covers the parts this summary leaves out:
+`business_query` evaluators, `save_failures`, and exactly which edits reset a test.
 
 ### Test Types
 
@@ -910,6 +993,35 @@ schedule:
   query_delay: 15m
 ```
 
+#### Time segmentation
+
+`time_partitioning_column` splits the asset into time segments (one data point per day or
+hour) and is set on the monitor, the entity, or in `defaults`:
+
+```yaml
+entities:
+  - id: bq-prod.dataset.orders
+    time_partitioning_column: created_at
+    monitors:
+      - type: volume
+        id: orders_volume
+```
+
+Omit it to monitor the asset **without time segmentation** — the metric is computed over the
+whole asset once per run, and there is no historical backfill on the first run:
+
+```yaml
+entities:
+  - id: bq-prod.dataset.reference_data
+    monitors:
+      - type: volume
+        id: reference_data_row_count
+```
+
+`time_partitioning_interval` (ondemand schedules) requires a `time_partitioning_column`.
+
+Without time segmentation there are no segments to skip, so `ignore_last` has no effect.
+
 #### Mode
 
 ```yaml
@@ -1028,14 +1140,14 @@ jobs:
 
       - name: Validate YAML files
         env:
-          SYNQ_CLIENT_ID: ${{ secrets.SYNQ_CLIENT_ID }}
-          SYNQ_CLIENT_SECRET: ${{ secrets.SYNQ_CLIENT_SECRET }}
-          SYNQ_API_URL: https://developer.synq.io
+          QUALITY_CLIENT_ID: ${{ secrets.QUALITY_CLIENT_ID }}
+          QUALITY_CLIENT_SECRET: ${{ secrets.QUALITY_CLIENT_SECRET }}
+          QUALITY_API_ENDPOINT: https://developer.synq.io
         run: |
           synqcli deploy data-quality/**/*.yaml --dry-run
 
   deploy:
-    name: Deploy to SYNQ
+    name: Deploy to Coalesce Quality
     runs-on: ubuntu-latest
     needs: validate
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -1049,16 +1161,16 @@ jobs:
 
       - name: Deploy tests and monitors
         env:
-          SYNQ_CLIENT_ID: ${{ secrets.SYNQ_CLIENT_ID }}
-          SYNQ_CLIENT_SECRET: ${{ secrets.SYNQ_CLIENT_SECRET }}
-          SYNQ_API_URL: https://developer.synq.io
+          QUALITY_CLIENT_ID: ${{ secrets.QUALITY_CLIENT_ID }}
+          QUALITY_CLIENT_SECRET: ${{ secrets.QUALITY_CLIENT_SECRET }}
+          QUALITY_API_ENDPOINT: https://developer.synq.io
         run: |
           synqcli deploy data-quality/**/*.yaml --auto-confirm
 ```
 
 This workflow:
 - **On Pull Request**: Validates YAML files with `--dry-run` (no actual deployment)
-- **On Merge to Main**: Deploys tests and monitors to SYNQ
+- **On Merge to Main**: Deploys tests and monitors to Coalesce Quality
 
 ### GitLab CI
 
@@ -1078,9 +1190,9 @@ validate-data-quality:
     - mv synqcli /usr/local/bin/
     - synqcli deploy data-quality/**/*.yaml --dry-run
   variables:
-    SYNQ_CLIENT_ID: $SYNQ_CLIENT_ID
-    SYNQ_CLIENT_SECRET: $SYNQ_CLIENT_SECRET
-    SYNQ_API_URL: https://developer.synq.io
+    QUALITY_CLIENT_ID: $QUALITY_CLIENT_ID
+    QUALITY_CLIENT_SECRET: $QUALITY_CLIENT_SECRET
+    QUALITY_API_ENDPOINT: https://developer.synq.io
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
@@ -1095,9 +1207,9 @@ deploy-data-quality:
     - mv synqcli /usr/local/bin/
     - synqcli deploy data-quality/**/*.yaml --auto-confirm
   variables:
-    SYNQ_CLIENT_ID: $SYNQ_CLIENT_ID
-    SYNQ_CLIENT_SECRET: $SYNQ_CLIENT_SECRET
-    SYNQ_API_URL: https://developer.synq.io
+    QUALITY_CLIENT_ID: $QUALITY_CLIENT_ID
+    QUALITY_CLIENT_SECRET: $QUALITY_CLIENT_SECRET
+    QUALITY_API_ENDPOINT: https://developer.synq.io
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
@@ -1110,8 +1222,8 @@ Add these secrets to your CI/CD environment:
 
 | Secret | Description |
 |--------|-------------|
-| `SYNQ_CLIENT_ID` | Your SYNQ API client ID |
-| `SYNQ_CLIENT_SECRET` | Your SYNQ API client secret |
+| `QUALITY_CLIENT_ID` | Your Coalesce Quality API client ID |
+| `QUALITY_CLIENT_SECRET` | Your Coalesce Quality API client secret |
 
 For GitHub: Settings → Secrets and variables → Actions → New repository secret
 
@@ -1125,17 +1237,17 @@ For GitLab: Settings → CI/CD → Variables
 
 **Authentication errors:**
 ```
-Error: failed to connect to SYNQ API: authentication failed
+Error: failed to connect to Coalesce Quality API: authentication failed
 ```
-- Verify `SYNQ_CLIENT_ID` and `SYNQ_CLIENT_SECRET` are correct
-- Check you're using the correct `SYNQ_API_URL` for your region
+- Verify `QUALITY_CLIENT_ID` and `QUALITY_CLIENT_SECRET` are correct
+- Check you're using the correct `QUALITY_API_ENDPOINT` for your region
 
 **Entity not found:**
 ```
 Error: failed to resolve entity: postgres::public::users
 ```
-- Verify the entity ID matches exactly what's shown in SYNQ
-- Check the entity exists and is synced to SYNQ
+- Verify the entity ID matches exactly what's shown in the app
+- Check the entity exists and is synced to Coalesce Quality
 
 **Invalid YAML:**
 ```

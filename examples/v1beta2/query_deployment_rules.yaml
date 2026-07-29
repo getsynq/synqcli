@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=https://schemas.synq.io/synq-monitors/v1/config.schema.json
+version: v1beta2
+namespace: "data-team-pipeline"
+
+# Entity-anchored rules target a single asset path (unchanged).
+entities:
+  - id: ch-prod.default.runs
+    monitors:
+      - type: table_stats
+        severity: ERROR
+        metrics:
+          - ROW_COUNT
+
+# Query-based inclusion rules select many assets dynamically via a ResolverQL
+# string — the same selection the MCP `deploy_deployment_rule` tool and the app
+# UI author. New matching assets are covered automatically, no YAML edit.
+deployment_rules:
+  - name: snowflake tables row-count and delay
+    type: table_stats
+    resolver_ql: in_folder(static_paths("folder-ch-prod::issues"), types=["clickhouse_table"])
+    severity: ERROR
+    sensitivity: RELAXED
+    metrics:
+      - metric: ROW_COUNT
+        sensitivity: BALANCED
+      - metric: DELAY
+        sensitivity: PRECISE
+
+# Query-based exclusions carve matching assets OUT of coverage. An exclusion is
+# only a selection — no metrics/severity/sensitivity (those say how to monitor,
+# not what to skip).
+deployment_exclusions:
+  - name: exclude staging tables
+    type: table_stats
+    resolver_ql: with_type("table", filter=with_name("staging"))

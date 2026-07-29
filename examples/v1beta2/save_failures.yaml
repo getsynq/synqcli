@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://schemas.synq.io/synq-monitors/v1/config.schema.json
+#
+# Exercises round-trip of test.save_failures and the hoist-to-defaults pass
+# from PR-21737. When every test in the config has save_failures: true the
+# generator hoists it to defaults; the parser re-applies it on the way back.
+
+version: v1beta2
+namespace: save-failures
+
+entities:
+  - id: ch-prod.default.financial_statement
+    tests:
+      - type: not_null
+        columns: [total_revenue]
+        save_failures: true
+
+      - type: unique
+        columns: [month]
+        save_failures: true

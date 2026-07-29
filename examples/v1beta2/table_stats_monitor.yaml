@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://schemas.synq.io/synq-monitors/v1/config.schema.json
+# Example of table stats monitor configuration
+
+version: v1beta2
+
+namespace: "data-team-pipeline"
+
+entities:
+  - id: ch-prod.default.runs
+
+    monitors:
+      # Simple metrics list with shared sensitivity
+      - type: table_stats
+        severity: ERROR
+        sensitivity: RELAXED
+        metrics:
+          - ROW_COUNT
+          - DELAY
+          - VOLUME_CHANGE_DELAY
+
+  - id: ch-prod.anomalies.corrections_v2
+
+    monitors:
+      # Per-metric sensitivity configuration
+      - type: table_stats
+        severity: ERROR
+        metrics:
+          - metric: ROW_COUNT
+            sensitivity: BALANCED
+          - metric: DELAY
+            sensitivity: PRECISE

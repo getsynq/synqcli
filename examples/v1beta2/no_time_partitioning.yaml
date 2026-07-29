@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://schemas.synq.io/synq-monitors/v1/config.schema.json
+# Omitting time_partitioning_column creates a monitor with no time segmentation:
+# the metric is computed over the whole asset once per run, with no historical
+# backfill on the first run.
+
+version: v1beta2
+
+entities:
+  - id: ch-prod.default.runs
+    monitors:
+      - type: volume
+        id: runs_volume_whole_table
+
+      - type: custom_numeric
+        id: runs_avg_duration_whole_table
+        metric_aggregation: "AVG(duration_ms)"

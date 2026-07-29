@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://schemas.synq.io/synq-monitors/v1/config.schema.json
+# Create a single volume monitor for runs table running daily with time partitioning shift.
+
+version: v1beta2
+
+entities:
+  - id: ch-prod.default.runs
+    time_partitioning_column: created_at
+
+    monitors:
+      - id: runs_volume_daily
+        type: volume
+        timezone: Europe/Prague
+        schedule:
+          type: daily
+          query_delay: 1h

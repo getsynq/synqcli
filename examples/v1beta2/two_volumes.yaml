@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://schemas.synq.io/synq-monitors/v1/config.schema.json
+# Create two volume monitors for runs table with defaults (schedule=daily, severity=Error)
+
+version: v1beta2
+
+entities:
+  - id: ch-prod.default.runs
+    time_partitioning_column: created_at
+
+    monitors:
+      - type: volume
+
+      - type: volume
+        segmentation:
+          expression: workspace
+        time_partitioning_column: updated_at
