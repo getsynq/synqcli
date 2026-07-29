@@ -3,6 +3,13 @@
 Command-line tool for managing data quality tests, monitors and deployment rules on
 [Coalesce Quality](https://synq.io).
 
+**`AGENTS.md`, shipped beside the binary, is the operating guide** — the deploy
+loop, what a reconcile deletes, how to confirm which workspace you are pointed at,
+and what each command costs. It is written for a coding agent driving the tool, and
+is also published at
+[docs.synq.io/monitors/agent-workflow](https://docs.synq.io/monitors/agent-workflow).
+This README covers what the tool is and how a config is structured.
+
 ## Features
 
 - **Deploy** - Deploy data quality tests, monitors and deployment rules from YAML configuration files
