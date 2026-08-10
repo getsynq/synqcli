@@ -1179,8 +1179,13 @@ jobs:
 
       - name: Install synqcli
         run: |
-          curl -L https://github.com/getsynq/synqcli/releases/latest/download/synqcli_linux_amd64.tar.gz | tar -xz
+          # The archive filename carries the version, so resolve it first. Set
+          # VERSION to a literal instead to pin the pipeline to a known release.
+          VERSION=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+            https://github.com/getsynq/synqcli/releases/latest | sed 's#.*/v##')
+          curl -fL "https://github.com/getsynq/synqcli/releases/download/v${VERSION}/synqcli_${VERSION}_linux_amd64.tar.gz" | tar -xz
           sudo mv synqcli /usr/local/bin/
+          synqcli --version
 
       - name: Validate YAML files
         env:
@@ -1200,8 +1205,13 @@ jobs:
 
       - name: Install synqcli
         run: |
-          curl -L https://github.com/getsynq/synqcli/releases/latest/download/synqcli_linux_amd64.tar.gz | tar -xz
+          # The archive filename carries the version, so resolve it first. Set
+          # VERSION to a literal instead to pin the pipeline to a known release.
+          VERSION=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+            https://github.com/getsynq/synqcli/releases/latest | sed 's#.*/v##')
+          curl -fL "https://github.com/getsynq/synqcli/releases/download/v${VERSION}/synqcli_${VERSION}_linux_amd64.tar.gz" | tar -xz
           sudo mv synqcli /usr/local/bin/
+          synqcli --version
 
       - name: Deploy tests and monitors
         env:
@@ -1230,8 +1240,12 @@ validate-data-quality:
   image: alpine:latest
   script:
     - apk add --no-cache curl
-    - curl -L https://github.com/getsynq/synqcli/releases/latest/download/synqcli_linux_amd64.tar.gz | tar -xz
+    # The archive filename carries the version, so resolve it first. Set VERSION
+    # to a literal instead to pin the pipeline to a known release.
+    - VERSION=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/getsynq/synqcli/releases/latest | sed 's#.*/v##')
+    - curl -fL "https://github.com/getsynq/synqcli/releases/download/v${VERSION}/synqcli_${VERSION}_linux_amd64.tar.gz" | tar -xz
     - mv synqcli /usr/local/bin/
+    - synqcli --version
     - synqcli deploy data-quality/**/*.yaml --dry-run
   variables:
     QUALITY_CLIENT_ID: $QUALITY_CLIENT_ID
@@ -1247,8 +1261,12 @@ deploy-data-quality:
   image: alpine:latest
   script:
     - apk add --no-cache curl
-    - curl -L https://github.com/getsynq/synqcli/releases/latest/download/synqcli_linux_amd64.tar.gz | tar -xz
+    # The archive filename carries the version, so resolve it first. Set VERSION
+    # to a literal instead to pin the pipeline to a known release.
+    - VERSION=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/getsynq/synqcli/releases/latest | sed 's#.*/v##')
+    - curl -fL "https://github.com/getsynq/synqcli/releases/download/v${VERSION}/synqcli_${VERSION}_linux_amd64.tar.gz" | tar -xz
     - mv synqcli /usr/local/bin/
+    - synqcli --version
     - synqcli deploy data-quality/**/*.yaml --auto-confirm
   variables:
     QUALITY_CLIENT_ID: $QUALITY_CLIENT_ID
