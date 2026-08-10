@@ -196,6 +196,12 @@ This is time series data. Suggest tests for:
 - `advisor` — a model call per entity, plus warehouse metadata reads. The only
   command here with a per-run cost worth thinking about; scope it with
   `--entity-id` and `--columns` rather than pointing it at everything.
+- `upgrade` — replaces this binary with the latest release, verified against the
+  release's `checksums.txt`; `upgrade --check` reports what it would do and changes
+  nothing. Neither touches the workspace. `synqcli` also mentions a newer release
+  on stderr about once a day, and stays silent when an agent is driving it, when
+  output is not a terminal, in CI, and in a container — so it never lands in output
+  you are parsing. `QUALITY_NO_UPDATE_CHECK=1` turns it off outright.
 
 ---
 

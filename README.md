@@ -25,33 +25,60 @@ Reference documentation:
 
 ## Installation
 
-### macOS
+### macOS and Linux
+
+The archive filename carries the version, so the version has to be resolved
+first. GitHub redirects `/releases/latest` to the newest release's tag, which
+needs no API token and no login:
 
 ```bash
-# Apple Silicon
-curl -L https://github.com/getsynq/synqcli/releases/latest/download/synqcli_darwin_arm64.tar.gz | tar -xz
-sudo mv synqcli /usr/local/bin/
+VERSION=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+  https://github.com/getsynq/synqcli/releases/latest | sed 's#.*/v##')
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')          # darwin or linux
+ARCH=$(uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
 
-# Intel
-curl -L https://github.com/getsynq/synqcli/releases/latest/download/synqcli_darwin_amd64.tar.gz | tar -xz
+curl -fL "https://github.com/getsynq/synqcli/releases/download/v${VERSION}/synqcli_${VERSION}_${OS}_${ARCH}.tar.gz" \
+  | tar -xz
 sudo mv synqcli /usr/local/bin/
 ```
 
-### Linux
+To pin a version instead, set `VERSION` by hand from the
+[releases page](https://github.com/getsynq/synqcli/releases).
 
-```bash
-# AMD64
-curl -L https://github.com/getsynq/synqcli/releases/latest/download/synqcli_linux_amd64.tar.gz | tar -xz
-sudo mv synqcli /usr/local/bin/
-
-# ARM64
-curl -L https://github.com/getsynq/synqcli/releases/latest/download/synqcli_linux_arm64.tar.gz | tar -xz
-sudo mv synqcli /usr/local/bin/
-```
+Builds are published for macOS and Linux on both amd64 and arm64, and every
+release ships a `checksums.txt` (`sha256sum -c checksums.txt --ignore-missing`).
 
 ### Windows
 
-Download the latest release from the [releases page](https://github.com/getsynq/synqcli/releases) and extract `synqcli.exe` to your PATH.
+Download `synqcli_<version>_windows_amd64.zip` (or `_arm64`) from the
+[releases page](https://github.com/getsynq/synqcli/releases) and extract
+`synqcli.exe` to your PATH.
+
+### Upgrading
+
+```bash
+synqcli upgrade --check      # what it would do, without doing it
+synqcli upgrade
+```
+
+`upgrade` resolves the latest release, downloads the archive for this platform,
+verifies it against the release's `checksums.txt`, and runs the new binary once to
+prove it works on this machine before replacing anything. If the binary lives
+somewhere you cannot write — `/usr/local/bin` usually is not — it says so and
+changes nothing; re-run it with `sudo`. A binary installed by a package manager is
+left to that package manager.
+
+`synqcli` also mentions a newer release on stderr, at most once a day. That check
+reads a tag from a public GitHub URL and sends nothing but the tool name and
+version — no credentials, no workspace, no identity. It never delays the command it
+runs beside and never reports its own failure, so a machine with no route to the
+internet behaves exactly like one that is up to date. It is already silent in CI,
+when output is not a terminal, and inside a container or a Kubernetes pod. To
+switch it off everywhere:
+
+```bash
+export QUALITY_NO_UPDATE_CHECK=1     # DO_NOT_TRACK=1 has the same effect
+```
 
 ## Configuration
 
