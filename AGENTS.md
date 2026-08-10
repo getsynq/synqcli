@@ -216,6 +216,12 @@ This is time series data. Suggest tests for:
 | Deploying to the wrong workspace | `auth status`, and check `--region` |
 | A field is rejected | Check it against the published schema; strict decoding rejects unknown fields rather than ignoring them |
 
+**Exit codes.** `0` means the command did what it said; `1` means it did not —
+a failed deploy or export, and also a mistyped flag, an unknown command, a
+missing argument or an unusable `--region` / `--endpoint`. So a CI step that
+checks the status catches an invocation an older `synqcli` does not understand,
+instead of passing having deployed nothing.
+
 The full command and flag reference is generated from the CLI itself and published
 as the [CLI reference](https://docs.synq.io/monitors/cli). For what the YAML
 declares and why, start at
