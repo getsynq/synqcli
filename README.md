@@ -25,7 +25,16 @@ Reference documentation:
 
 ## Installation
 
-### macOS and Linux
+### macOS — Homebrew
+
+```bash
+brew install getsynq/tap/synqcli
+```
+
+`brew upgrade synqcli` from then on. Homebrew owns the binary once it installs it,
+so `synqcli upgrade` will point you back here rather than replace it.
+
+### macOS and Linux — release archive
 
 The archive filename carries the version, so the version has to be resolved
 first. GitHub redirects `/releases/latest` to the newest release's tag, which
@@ -66,7 +75,8 @@ verifies it against the release's `checksums.txt`, and runs the new binary once 
 prove it works on this machine before replacing anything. If the binary lives
 somewhere you cannot write — `/usr/local/bin` usually is not — it says so and
 changes nothing; re-run it with `sudo`. A binary installed by a package manager is
-left to that package manager.
+left to that package manager — a Homebrew install is upgraded with
+`brew upgrade synqcli`, which `upgrade` will tell you.
 
 `synqcli` also mentions a newer release on stderr, at most once a day. That check
 reads a tag from a public GitHub URL and sends nothing but the tool name and
