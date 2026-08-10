@@ -1312,6 +1312,8 @@ synqcli deploy tests.yaml -p
 
 ## Support
 
-- **Documentation**: [docs.synq.io](https://docs.synq.io)
-- **Issues**: [github.com/getsynq/synqcli/issues](https://github.com/getsynq/synqcli/issues)
-- **Email**: support@synq.io
+Every Coalesce Quality customer has a shared Slack channel with a Technical Account
+Manager. Ask there for anything — getting a configuration deployed, a platform you
+want supported, or something that looks wrong.
+[Support](https://docs.synq.io/support/support) has the details, and
+[docs.synq.io](https://docs.synq.io) covers the rest of the platform.
