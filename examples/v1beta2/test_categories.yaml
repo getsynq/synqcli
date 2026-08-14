@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=https://schemas.synq.io/synq-monitors/v1/config.schema.json
+#
+# Exercises round-trip of the categories a test declares for itself. The two
+# dimensions resolve independently, so a test may declare either, both, or
+# neither — and a test that declares neither must come back with both keys
+# absent rather than empty.
+
+version: v1beta2
+namespace: test-categories
+
+entities:
+  - id: ch-prod.default.financial_statement
+    tests:
+      - type: not_null
+        columns: [total_revenue]
+        category: nullness
+        governance_category: completeness
+
+      # Technical only: the governance dimension is left to the workspace's
+      # categorisation rules.
+      - type: unique
+        columns: [month]
+        category: uniqueness
+
+      # Governance only.
+      - type: empty
+        columns: [region]
+        governance_category: completeness
+
+      # Neither — the rules decide both.
+      - type: freshness
+        time_partition_column: created_at
+        time_window_seconds: 86400

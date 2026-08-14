@@ -125,6 +125,31 @@ entities:
 
 Changing `save_failures` does not reset a test's historical results.
 
+### Categories (`category`, `governance_category`)
+
+A test can declare its own categories. `category` is the **technical** dimension — what kind of check this is mechanically, e.g. `nullness` or `uniqueness`. `governance_category` is what the check is *for*, the data quality dimension governance reports on, e.g. `completeness`. Both are free-form strings — use whatever vocabulary your categorisation rules already use — and they resolve independently, so a test may set either, both, or neither:
+
+```yaml
+entities:
+  - id: project.dataset.table
+    tests:
+      - type: not_null
+        columns: [id]
+        category: nullness
+        governance_category: completeness
+
+      - type: unique
+        columns: [id]
+        category: uniqueness
+        # governance category left to the categorisation rules
+```
+
+What a test declares here **takes precedence over your workspace's categorisation rules** for that test. Leave a category out and the rules decide it as before; delete one from the file and the next deploy hands that dimension back to the rules. Values are shown with underscores as spaces, so `snake_case` reads well.
+
+There is deliberately no `defaults:` entry for either field. A default would categorise every test in the file, and because a declared category outranks the rules, that would switch the rules off for all of them rather than fill a gap.
+
+Changing a category does not reset a test's historical results.
+
 ## Evaluators (business_query only)
 
 Evaluators let you attach multiple named, severity-tagged SQL boolean FAIL conditions to a `business_query` test. Each evaluator independently checks a row-level expression against the result rows; when any evaluator fails, the test outcome becomes the worst severity among failing evaluators.
