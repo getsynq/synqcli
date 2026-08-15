@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=https://schemas.synq.io/synq-monitors/v1/config.schema.json
+#
+# Exercises round-trip of the categories a monitor declares for itself. The two
+# dimensions resolve independently, so a monitor may declare either, both, or
+# neither — and a monitor that declares neither must come back with both keys
+# absent rather than empty.
+
+version: v1beta2
+namespace: monitor-categories
+
+entities:
+  - id: ch-prod::default::runs
+    time_partitioning_column: created_at
+
+    monitors:
+      - id: runs_volume_daily
+        type: volume
+        category: volume
+        governance_category: timeliness
+
+      # Technical only: the governance dimension is left to the workspace's
+      # categorisation rules.
+      - id: runs_freshness_daily
+        type: freshness
+        expression: created_at
+        category: freshness
+
+      # Governance only.
+      - id: runs_amount_daily
+        type: custom_numeric
+        metric_aggregation: sum(amount)
+        governance_category: accuracy
+
+      # A segmented monitor: its segments inherit these two values, they cannot
+      # declare their own.
+      - id: runs_volume_by_status
+        type: volume
+        segmentation:
+          expression: run_status
+        category: volume
+
+      # Neither — the rules decide both.
+      - id: runs_status_distribution
+        type: category_distribution
+        column: run_status

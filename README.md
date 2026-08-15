@@ -1081,6 +1081,35 @@ mode:
     max: 1000
 ```
 
+#### Categories (`category`, `governance_category`)
+
+A monitor can declare its own categories. `category` is the **technical** dimension — what kind of check this is mechanically, e.g. `volume` or `freshness`. `governance_category` is what the check is *for*, the data quality dimension governance reports on, e.g. `timeliness`. Both are free-form strings — use whatever vocabulary your categorisation rules already use — and they resolve independently, so a monitor may set either, both, or neither:
+
+```yaml
+entities:
+  - id: bq-prod.dataset.orders
+    time_partitioning_column: created_at
+    monitors:
+      - type: volume
+        id: orders_volume
+        category: volume
+        governance_category: timeliness
+
+      - type: freshness
+        id: orders_freshness
+        expression: created_at
+        category: freshness
+        # governance category left to the categorisation rules
+```
+
+What a monitor declares here **takes precedence over your workspace's categorisation rules** for that monitor. Leave a category out and the rules decide it as before; delete one from the file and the next deploy hands that dimension back to the rules. Values are shown with underscores as spaces, so `snake_case` reads well.
+
+A segmented monitor's segments take the monitor's categories. A segment is the same monitor sliced by a column value, so it cannot declare categories of its own.
+
+There is deliberately no `defaults:` entry for either field. A default would categorise every monitor in the file, and because a declared category outranks the rules, that would switch the rules off for all of them rather than fill a gap.
+
+Changing a category does not reset a monitor's learned baseline.
+
 ---
 
 ## Test Lifecycle
