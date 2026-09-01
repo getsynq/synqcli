@@ -218,8 +218,12 @@ compatibility only. Do not author new files in it.
 `relationships`.
 
 **Deployment rules** (`deployment_rules`, and `deployment_exclusions` to carve
-assets back out) apply monitors by *query* rather than by listing assets, so a new
-matching asset is covered without editing the file.
+assets back out) apply checks by *query* rather than by listing assets, so a new
+matching asset is covered without editing the file. `type` says what a rule
+deploys: `table_stats` deploys monitors, `sql_tests` deploys the SQL tests listed
+under its own `tests:`, onto every table or view the selection matches. On a
+`sql_tests` rule the schedule, timezone, severity and `save_failures` are
+rule-level and govern every test it deploys; a test may override only `severity`.
 
 Where to look for the fields of any one of them, in order of authority:
 
@@ -279,6 +283,26 @@ And for tests:
 | the SQL of a `business_rule` or `business_query` | replace |
 | change the test type | replace |
 | rename the `id` | replace |
+
+A deployment rule's identity is different, and the two kinds of rule differ from
+each other. A `sql_tests` rule is identified by its **`name` within its
+namespace** — its `resolver_ql`, its `tests:`, its schedule and its severity are
+all attributes you can edit. A `table_stats` rule is identified by its
+**`resolver_ql`**, so editing that query replaces the rule.
+
+| Edit | `sql_tests` rule | `table_stats` rule |
+|---|---|---|
+| `resolver_ql` — broaden, narrow, or just reformat | update in place | replace |
+| the `tests:` a rule deploys, its schedule, severity, timezone | update in place | n/a |
+| `metrics`, `sensitivity` | n/a | update in place |
+| `name` | replace | update in place |
+
+Updating a `sql_tests` rule in place resyncs it: checks appear on tables the
+selection now matches, go away from tables it no longer matches, and tables that
+match both before and after keep the checks they already had, with their history.
+Replacing a rule does not — **deleting a deployment rule deletes every check it
+deployed**, with their history, so when you are iterating on a selection, edit the
+query and leave the `name` alone.
 
 **`--dry-run` shows a replacement as a delete plus a create**, in the two separate
 sections of the plan. It is not labelled "rename", and nothing warns you, so the

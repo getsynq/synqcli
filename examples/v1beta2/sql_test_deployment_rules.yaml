@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://schemas.synq.io/synq-monitors/v1/config.schema.json
+version: v1beta2
+namespace: "pii-coverage"
+
+entities:
+  - id: ch-prod.default.users
+    tests:
+      - type: not_null
+        columns: [id]
+
+# A `type: sql_tests` deployment rule selects tables and views with a ResolverQL
+# string and deploys every test below onto each match. New matching tables are
+# covered automatically; the schedule, timezone, severity and save_failures are
+# rule-level and apply to every deployed test.
+deployment_rules:
+  - name: PII email checks
+    type: sql_tests
+    resolver_ql: with_columns("email")
+    # Omit for daily, as an anchored test does. Use `ondemand` to deploy the
+    # tests without scheduling them to run.
+    schedule: daily
+    timezone: Europe/London
+    severity: ERROR
+    save_failures: true
+    # When a table stops matching, its deployed tests are deleted. Set true to
+    # leave them in place instead.
+    keep_removed_tests: false
+    tests:
+      - type: not_null
+        columns: [email]
+      - type: unique
+        columns: [email]
+      - type: business_rule
+        # `name` is required for business_rule and business_query: it is the
+        # test's identity across redeployments of the rule.
+        name: email looks like an address
+        sql_expression: email NOT LIKE '%@%'

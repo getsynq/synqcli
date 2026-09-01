@@ -651,11 +651,14 @@ A rendered, browsable version of the same schema is at
 
 ## Query-based deployment rules
 
-A monitor under an `entities[].id` targets a single asset. To cover many assets by a
-rule instead of listing each one, author query-based deployment rules at the top level
-with a [ResolverQL](https://docs.synq.io/monitors/deployment-rules) selection string —
-the same selection the app and the API expose. New assets that match are covered
-automatically, with no YAML edit.
+A monitor or test under an `entities[].id` targets a single asset. To cover many assets
+by a rule instead of listing each one, author query-based deployment rules at the top
+level with a [ResolverQL](https://docs.synq.io/monitors/deployment-rules) selection
+string — the same selection the app and the API expose. New assets that match are
+covered automatically, with no YAML edit.
+
+`type` says what the rule deploys: `table_stats` deploys monitors, `sql_tests` deploys
+SQL tests. Both kinds live in the same `deployment_rules` list.
 
 ```yaml
 # yaml-language-server: $schema=https://schemas.synq.io/synq-monitors/v1/config.schema.json
@@ -697,6 +700,54 @@ Notes:
 - The deploy preview (before confirm, and under `--dry-run`) shows each query rule's
   downstream effect — how many monitors it will create / delete / change, plus skipped
   assets. The asset lists are capped; pass `--verbose` to list every affected asset.
+
+### Deploying SQL tests by rule
+
+A `type: sql_tests` rule carries the tests to deploy onto every table or view its
+selection matches, in the same shape as `entities[].tests[]`.
+
+```yaml
+deployment_rules:
+  - name: PII email checks
+    type: sql_tests
+    resolver_ql: with_columns("email")
+    schedule: daily              # omit for on-demand; `{type: hourly, query_delay: 30m}` also works
+    timezone: Europe/London
+    severity: ERROR
+    save_failures: true
+    # When a table stops matching, its deployed tests are deleted. Set true to keep them.
+    keep_removed_tests: false
+    tests:
+      - type: not_null
+        columns: [email]
+      - type: business_rule
+        name: email looks like an address
+        sql_expression: email NOT LIKE '%@%'
+```
+
+Notes:
+
+- `schedule`, `timezone`, `severity` and `save_failures` are rule-level: they apply to
+  every test the rule deploys. A test may override `severity`; the others cannot be set
+  per test and are rejected there, because the deployed test has nowhere to carry them.
+- `name` is required on `business_rule` and `business_query` tests: it is the test's
+  identity across redeployments, so a renamed test is treated as a different test. For
+  every other kind, leave it out and a name is generated per matched table.
+- `id`, `category`, `governance_category` and `business_query` `evaluators` are not
+  supported on a test inside a rule, and are rejected rather than silently dropped.
+  Author such a test under `entities[].tests[]` instead.
+- Rules covering the same table merge additively: each deploys the tests that are not
+  there yet and never touches a test another rule owns. The deploy preview names the
+  tests it skipped and the rule that owns them.
+- A `sql_tests` rule is identified by its `name` within its namespace, so editing its
+  `resolver_ql` updates the rule and resyncs it: tests appear on tables the selection
+  now matches, go away from tables it no longer matches, and tables matching both
+  before and after keep the tests they already had. Renaming a rule replaces it
+  instead, and deleting a rule deletes every test it deployed. (A `type: table_stats`
+  rule is the other way round — its identity *is* its `resolver_ql`, so editing that
+  query replaces the rule and the monitors it deployed.)
+- A full example is
+  [`examples/v1beta2/sql_test_deployment_rules.yaml`](examples/v1beta2/sql_test_deployment_rules.yaml).
 
 ---
 
