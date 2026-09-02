@@ -225,6 +225,12 @@ under its own `tests:`, onto every table or view the selection matches. On a
 `sql_tests` rule the schedule, timezone, severity and `save_failures` are
 rule-level and govern every test it deploys; a test may override only `severity`.
 
+`export` writes `sql_tests` rules back into the `deployment_rules` list, so a
+workspace that has them can be adopted with the loop in section 1. A
+`table_stats` rule is written as the single-asset `table_stats` monitors it
+covers; its query form is authoring-only, so a file that has to keep one must
+keep the hand-written version.
+
 Where to look for the fields of any one of them, in order of authority:
 
 1. [the published schema](https://schemas.synq.io/synq-monitors/v1/config.schema.json)
@@ -285,9 +291,11 @@ And for tests:
 | rename the `id` | replace |
 
 A deployment rule's identity is different, and the two kinds of rule differ from
-each other. A `sql_tests` rule is identified by its **`name` within its
-namespace** — its `resolver_ql`, its `tests:`, its schedule and its severity are
-all attributes you can edit. A `table_stats` rule is identified by its
+each other. A `sql_tests` rule is identified by its optional **`id`**, and
+otherwise by its **`name` within its namespace** — its `resolver_ql`, its
+`tests:`, its schedule and its severity are all attributes you can edit. `export`
+writes the `id`, so a rule created in the app round-trips into the config as the
+same rule. A `table_stats` rule is identified by its
 **`resolver_ql`**, so editing that query replaces the rule.
 
 | Edit | `sql_tests` rule | `table_stats` rule |

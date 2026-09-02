@@ -484,9 +484,9 @@ synqcli export \
 
 #### Selective export by resource type
 
-By default `export` writes all three resource types (custom monitors, SQL tests,
-deployment rules). Use `--type` (repeatable) to narrow, or pass an ID-scoped flag and
-the type is inferred automatically.
+By default `export` writes every resource type (custom monitors, SQL tests,
+deployment rules and SQL test deployment rules). Use `--type` (repeatable) to narrow,
+or pass an ID-scoped flag and the type is inferred automatically.
 
 ```bash
 # Only SQL tests
@@ -502,8 +502,22 @@ synqcli export --sql-test=<test-uuid> generated/one_test.yaml
 synqcli export --type=monitors --sql-test=<test-uuid> generated/mix.yaml
 ```
 
-Query-based deployment rules are authoring-only and are never exported; `export`
-writes the single-asset rules only.
+The two kinds of deployment rule export differently, because each supports a
+different kind of selection:
+
+- **SQL test deployment rules** (`--type=sql-test-deployment-rules`) are
+  query-based, and are written to the `deployment_rules` list as
+  `type: sql_tests` entries.
+- **Monitor deployment rules** (`--type=deployment-rules`) are written as
+  single-asset `table_stats` monitors under the entity they cover. Their
+  query-based form is authoring-only and is not exported.
+
+`--monitored` and `--integration` narrow monitors and SQL tests. They do not
+narrow a query-based rule: it carries no asset path of its own, and what its
+selection matches is resolved server-side. An export that passes them therefore
+still writes every SQL test deployment rule in the workspace, and says so. Use
+`--sql-test-deployment-rule=<rule-uuid>` to pick specific rules, or leave the type
+out with `--type`.
 
 #### Flags
 
@@ -735,12 +749,16 @@ Notes:
   every other kind, leave it out and a name is generated from the test's kind and
   columns (`Unique on order_id`), the same as for a test under `entities[].tests[]`.
 - `id`, `category`, `governance_category` and `business_query` `evaluators` are not
-  supported on a test inside a rule, and are rejected rather than silently dropped.
+  supported on a *test* inside a rule (the rule's own `id` is separate), and are rejected rather than silently dropped.
   Author such a test under `entities[].tests[]` instead.
 - Rules covering the same table merge additively: each deploys the tests that are not
   there yet and never touches a test another rule owns. The deploy preview names the
   tests it skipped and the rule that owns them.
-- A `sql_tests` rule is identified by its `name` within its namespace, so editing its
+- `id` is optional and identifies the rule outright when present. Leave it out when
+  authoring by hand — the id is derived from the namespace and the `name`. `export`
+  writes it, so deploying an exported config updates the rules it was exported from
+  rather than creating copies of them.
+- Without an `id`, a `sql_tests` rule is identified by its `name` within its namespace, so editing its
   `resolver_ql` updates the rule and resyncs it: tests appear on tables the selection
   now matches, go away from tables it no longer matches, and tables matching both
   before and after keep the tests they already had. Renaming a rule replaces it
