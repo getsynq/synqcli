@@ -732,7 +732,8 @@ Notes:
   per test and are rejected there, because the deployed test has nowhere to carry them.
 - `name` is required on `business_rule` and `business_query` tests: it is the test's
   identity across redeployments, so a renamed test is treated as a different test. For
-  every other kind, leave it out and a name is generated per matched table.
+  every other kind, leave it out and a name is generated from the test's kind and
+  columns (`Unique on order_id`), the same as for a test under `entities[].tests[]`.
 - `id`, `category`, `governance_category` and `business_query` `evaluators` are not
   supported on a test inside a rule, and are rejected rather than silently dropped.
   Author such a test under `entities[].tests[]` instead.
