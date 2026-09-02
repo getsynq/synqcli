@@ -290,27 +290,38 @@ And for tests:
 | change the test type | replace |
 | rename the `id` | replace |
 
-A deployment rule's identity is different, and the two kinds of rule differ from
-each other. A `sql_tests` rule is identified by its optional **`id`**, and
-otherwise by its **`name` within its namespace** — its `resolver_ql`, its
-`tests:`, its schedule and its severity are all attributes you can edit. `export`
-writes the `id`, so a rule created in the app round-trips into the config as the
-same rule. A `table_stats` rule is identified by its
-**`resolver_ql`**, so editing that query replaces the rule.
+A deployment rule's identity is different, and simpler: **a deployment rule is
+identified by its `name` within its namespace.** That holds for both kinds and for
+a `deployment_exclusions` entry. Everything else about it — the `resolver_ql` it
+selects with, and whatever the kind carries to describe the checks it deploys — is
+an attribute you can edit.
 
-| Edit | `sql_tests` rule | `table_stats` rule |
-|---|---|---|
-| `resolver_ql` — broaden, narrow, or just reformat | update in place | replace |
-| the `tests:` a rule deploys, its schedule, severity, timezone | update in place | n/a |
-| `metrics`, `sensitivity` | n/a | update in place |
-| `name` | replace | update in place |
+A `sql_tests` rule may also carry an explicit **`id`**, which identifies it
+outright and survives a rename. It must be a UUID, and `export` writes one — so a
+rule created in the app round-trips into the config as the same rule. A name of
+your own in that field is rejected rather than reinterpreted; omit `id` and the
+`name` identifies the rule.
 
-Updating a `sql_tests` rule in place resyncs it: checks appear on tables the
-selection now matches, go away from tables it no longer matches, and tables that
-match both before and after keep the checks they already had, with their history.
-Replacing a rule does not — **deleting a deployment rule deletes every check it
-deployed**, with their history, so when you are iterating on a selection, edit the
-query and leave the `name` alone.
+The two kinds carry different attributes, so the table names which fields belong
+to which — a field from the other kind is rejected, not ignored.
+
+| Edit | Result |
+|---|---|
+| `resolver_ql` — broaden, narrow, or just reformat | update in place |
+| `severity` — either kind | update in place |
+| `metrics`, `sensitivity`, `delay_model` — `table_stats` only | update in place |
+| the `tests:` a rule deploys, plus `schedule`, `timezone`, `save_failures`, `keep_removed_tests` — `sql_tests` only | update in place |
+| `name` | replace |
+
+Updating a rule in place resyncs it: checks appear on assets the selection now
+matches, go away from assets it no longer matches, and assets that match both
+before and after keep the checks they already had, with their history. Replacing a
+rule does not — **deleting a deployment rule deletes every check it deployed**,
+with their history, so when you are iterating on a selection, edit the query and
+leave the `name` alone.
+
+A rule and an exclusion may share a name: they are two different things, and each
+keeps its own identity.
 
 **`--dry-run` shows a replacement as a delete plus a create**, in the two separate
 sections of the plan. It is not labelled "rename", and nothing warns you, so the

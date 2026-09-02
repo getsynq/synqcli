@@ -700,14 +700,14 @@ deployment_exclusions:
 
 Notes:
 
-- `name` is required on every rule and exclusion; it labels the rule in the deploy
-  preview. It does not affect rule identity (that is derived from the selection), so
-  renaming a rule does not create a duplicate.
+- `name` is required on every rule and exclusion, and it **is** the rule's identity
+  within its namespace: editing the `resolver_ql`, the `metrics` or the `sensitivity`
+  updates the rule in place, while renaming it replaces it. Iterate on the query and
+  leave the `name` alone. A rule and an exclusion may share a name — they are two
+  different things.
 - `resolver_ql` is the only selection form supported here. The string is forwarded
   verbatim; the backend compiles and validates it, so an invalid query fails at deploy
   time.
-- A query rule authored here and the same `resolver_ql` authored via the API resolve to
-  the same rule, so the two paths converge rather than creating duplicates.
 - Query rules are authoring-only: `export` does not emit them (it writes single-asset
   `entities` rules). A full example is
   [`examples/v1beta2/query_deployment_rules.yaml`](examples/v1beta2/query_deployment_rules.yaml).
@@ -754,17 +754,18 @@ Notes:
 - Rules covering the same table merge additively: each deploys the tests that are not
   there yet and never touches a test another rule owns. The deploy preview names the
   tests it skipped and the rule that owns them.
-- `id` is optional and identifies the rule outright when present. Leave it out when
-  authoring by hand — the id is derived from the namespace and the `name`. `export`
-  writes it, so deploying an exported config updates the rules it was exported from
-  rather than creating copies of them.
-- Without an `id`, a `sql_tests` rule is identified by its `name` within its namespace, so editing its
-  `resolver_ql` updates the rule and resyncs it: tests appear on tables the selection
-  now matches, go away from tables it no longer matches, and tables matching both
-  before and after keep the tests they already had. Renaming a rule replaces it
-  instead, and deleting a rule deletes every test it deployed. (A `type: table_stats`
-  rule is the other way round — its identity *is* its `resolver_ql`, so editing that
-  query replaces the rule and the monitors it deployed.)
+- `id` is optional and identifies the rule outright when present. It must be a UUID —
+  a name of your own is rejected, not reinterpreted, because only a real id can
+  identify a rule across a rename. Leave it out when authoring by hand and the id is
+  derived from the namespace and the `name`. `export` writes it, so deploying an
+  exported config updates the rules it was exported from rather than creating copies
+  of them.
+- Without an `id`, a `sql_tests` rule is identified by its `name` within its
+  namespace — as is every deployment rule, `table_stats` and exclusions included —
+  so editing its `resolver_ql` updates the rule and resyncs it: tests appear on
+  tables the selection now matches, go away from tables it no longer matches, and
+  tables matching both before and after keep the tests they already had. Renaming a
+  rule replaces it instead, and deleting a rule deletes every test it deployed.
 - A full example is
   [`examples/v1beta2/sql_test_deployment_rules.yaml`](examples/v1beta2/sql_test_deployment_rules.yaml).
 
