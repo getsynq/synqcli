@@ -43,20 +43,25 @@ See [`examples/v1beta2/all_sql_tests_types.yaml`](examples/v1beta2/all_sql_tests
 
 ## Test Creation and Updates
 
-### UUID Generation
+### How a test is identified
 
-SQL tests use deterministic UUID generation based on their configuration. This ensures that:
+A test's id is derived, deterministically, so redeploying the same file updates
+the tests instead of duplicating them. What the id is derived from is what decides
+whether an edit updates a test or replaces it.
 
-- **Same configuration = Same UUID**: If you redeploy a test with identical configuration, it will receive the same UUID, allowing the system to recognize it as an update rather than a new test.
+**Write an `id:` and it is the test's address.** The derived id is then a hash of
+the namespace (`namespace:`, sent as the config id), the entity, the test type and
+that `id:` — and of nothing else, so every other field is editable in place. A
+UUID in `id:` is used verbatim, which is what `export` writes.
 
-The UUID is generated from the following fields:
+**Omit `id:` and the test's content is its identity**: the namespace, the entity,
+the test type, the columns it names, and the SQL of a `business_rule` or a
+`business_query`. That is what lets two tests of one type sit on one entity
+without either naming an id, and the cost is that editing a column or the SQL
+replaces the test.
 
-- Test ID (if provided)
-- Template hash (SQL expression for business rule tests)
-- Template identifier (Synq path to the monitored entity)
-- Test type
-
-If a test ID is already a valid UUID, it is used directly. Otherwise, a deterministic UUID is generated using SHA-1 hashing with a workspace-based seed.
+Either way the hash is seeded with the workspace, so the same file deployed to two
+workspaces produces two independent sets of tests.
 
 ### Creating New Tests
 
@@ -74,34 +79,44 @@ When you modify an existing test in your YAML configuration and deploy:
 2. If the UUID matches an existing test, the system recognizes it as an update
 3. The test configuration is updated accordingly
 
-**Important**: If you change the test ID, the system will treat it as a deletion of the old test and creation of a new test, even if the configuration is otherwise identical.
+**Important**: renaming `id:` — or moving a test to another entity, or changing its
+type — is a deletion of the old test and the creation of a new one, even when the
+configuration is otherwise identical. The new test is a new check entity, so the
+old test's issues and its error runs do not carry over. The deploy plan shows this
+as a delete plus a create; read both sections after editing an `id:`.
 
-## Test Reset Behavior
+## Test Re-Run Behavior
 
-When a test is updated, the system determines whether the test should be reset (re-triggered) based on the `ShouldReset` flag. A test is reset when certain aspects of its configuration change that require re-evaluation of historical data or test state.
+When a test is updated, `synqcli` decides whether to re-trigger it. This is a
+re-run, not a reset: **a test has no learned state, and nothing is discarded.** A
+test that carries a `schedule:` is re-armed and runs immediately instead of
+waiting for its next slot; a test with no `schedule:`, triggered by something
+outside `synqcli`, is not re-armed at all and simply runs at its next external
+trigger.
 
-### When Tests Are Reset
+### When Tests Are Re-Triggered
 
-Tests will be reset/re-triggered when any of the following changes occur:
+A test is re-armed when any of the following changes occur:
 
 1. **Recurrence Rule Changes**: The schedule or frequency of the test changes
 2. **Severity Changes**: The severity level (INFO, WARNING, ERROR) changes
-3. **Test Type Changes**: The test type itself changes (e.g., from `not_null` to `unique`)
+3. **Test Type Changes**: the test type itself changes (e.g., from `not_null` to `unique`) — note this also *replaces* the test, since the type is part of its address
 4. **Template Configuration Changes**: Any field within the test template changes:
 
-   - For `not_null`, `empty`, `unique`, `accepted_values`, `rejected_values`, `freshness`, `relative_time`, `business_rule`: Any field change triggers a reset
-   - For `min_max`, `min_value`, `max_value`: Changes to `strictly`, `min_value`, `max_value`, or `column` trigger a reset
-5. **Evaluator Changes**: Adding, removing, or modifying any evaluator on a `business_query` test triggers a reset
+   - For `not_null`, `empty`, `unique`, `accepted_values`, `rejected_values`, `freshness`, `relative_time`, `business_rule`: any field change re-arms it
+   - For `min_max`, `min_value`, `max_value`: changes to `strictly`, `min_value`, `max_value`, or `column` re-arm it
+5. **Evaluator Changes**: adding, removing, or modifying any evaluator on a `business_query` test re-arms it
 
-### When Tests Are Not Reset
+### When Tests Are Not Re-Triggered
 
-Tests are updated without reset when:
+Tests are updated without a re-run when:
 
 - Only metadata fields change (name, description) that don't affect the test logic
 - Changes that don't impact the test execution behavior
 - `save_failures` changes (enables or disables failure run persistence) — stored immediately, no historical data is affected
 
-When a test is reset, all previous test results and state are cleared, and the test begins fresh execution from the point of the update.
+A re-run keeps the test's results and its history. Losing those takes a
+*replacement* — see "How a test is identified" above.
 
 ### Saving Failure Runs (`save_failures`)
 
@@ -123,7 +138,9 @@ entities:
         save_failures: false   # override: disable for this test
 ```
 
-Changing `save_failures` does not reset a test's historical results.
+Changing `save_failures` does not discard a test's historical results — no edit to
+a test does. Only replacing the test does, and only because the replacement is a
+different check.
 
 ### Categories (`category`, `governance_category`)
 
@@ -148,7 +165,7 @@ What a test declares here **takes precedence over your workspace's categorisatio
 
 There is deliberately no `defaults:` entry for either field. A default would categorise every test in the file, and because a declared category outranks the rules, that would switch the rules off for all of them rather than fill a gap.
 
-Changing a category does not reset a test's historical results.
+Changing a category does not discard a test's historical results, and does not even re-run it.
 
 ## Evaluators (business_query only)
 
@@ -173,9 +190,10 @@ Use evaluators when a single business-query test covers multiple distinct concer
 
 Adding, removing, or changing evaluators does **not** change the test's UUID, so the test is updated in place and retains its deployment identity.
 
-### Reset behavior
+### Re-run behavior
 
-Any change to evaluators (add/remove/edit) resets the test's historical state.
+Any change to evaluators (add/remove/edit) re-arms the test, so it runs again
+straight away. Nothing is discarded — its previous results and its history stay.
 
 ### Example
 
@@ -213,7 +231,7 @@ The `sql_query` of the `business_query` template is the SELECT that produces res
 
 ## Configuration Reference
 
-For complete field specifications and validation rules, refer to `schema.json`. You can also reference the schema in your YAML files for IDE support:
+For complete field specifications and validation rules, refer to the [published schema](https://schemas.synq.io/synq-monitors/v1/config.schema.json). You can also reference it from your YAML files for IDE support:
 
 ```yaml
 # yaml-language-server: $schema=https://schemas.synq.io/synq-monitors/v1/config.schema.json

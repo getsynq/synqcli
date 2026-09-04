@@ -12,10 +12,10 @@ namespace owns that the file no longer declares is removed. Understanding that o
 sentence prevents most of the damage this tool can do.
 
 Two more facts decide almost everything else, and both are covered in full below.
-A check's identity is derived from what it is and what it watches, so some edits
-update a check in place and others silently replace it. And a check belongs to
-exactly one namespace, so pointing a second config at it is refused rather than
-merged.
+A check is addressed by its `id:` — write one and the rest of the check is
+editable, leave it out and its content is its identity, so some edits replace the
+check instead of updating it. And a check belongs to exactly one namespace, so
+pointing a second config at it is refused rather than merged.
 
 ---
 
@@ -194,16 +194,24 @@ entities:
         expression: created_at
 
     tests:
-      - type: unique
+      - id: order_id_unique
+        type: unique
         columns: [order_id]
 
-      - type: not_null
+      - id: required_order_fields
+        type: not_null
         columns: [customer_id, order_date]
 
-      - type: accepted_values
+      - id: order_status_values
+        type: accepted_values
         column: status
         values: [pending, processing, shipped, delivered, cancelled]
 ```
+
+Give every monitor and test an `id:` of your own, as above. It is optional, but it
+is the check's address: with one, editing any other field updates the check and
+keeps its history, and without one a good many edits replace it instead. Section 6
+is the whole story.
 
 `version: v1beta2` is the current format; `v1beta1` is legacy and exists for
 compatibility only. Do not author new files in it.
@@ -251,84 +259,126 @@ a field that was accepted shows up in the diff for an existing check.
 
 ## 6. What re-deploying changes, and what it replaces
 
-A check's id is derived from its identity, deterministically, so that running
-`deploy` twice updates rather than duplicates. The consequence is the part that
-surprises people: **change something in the identity and you have not edited a
-check, you have replaced it.** The old one is deleted, with its history and its
-learned baseline, and a new one is created.
+`deploy` matches a check by its **id**, so what the id is derived from decides
+whether an edit is an update or a replacement — and a replacement is not an edit.
+The old check is deleted, with its issue history and its error runs, and for a
+monitor with the baseline it has learned; a new one is created in its place.
 
-A monitor's identity is: its `id` field, the namespace, the entity it watches, the
-monitor type, the mode (`anomaly_engine` vs `fixed_thresholds`), the
-time-partitioning expression, the segmentation expression, and — for
-`custom_numeric` — its `metric_aggregation`, or for `category_distribution` its
-column.
+**Write an `id:` of your own and it becomes the check's address:**
 
-A SQL test's identity is: its `id` field, the namespace, the entity, the test type,
-the columns it names, and — for `business_rule` and `business_query` — the SQL
-itself.
+| `id:` | What identifies the check |
+|---|---|
+| a name of your own — `orders_nulls` | the namespace, the entity, the check type, and that name. Nothing else |
+| a UUID | itself, verbatim — this is what `export` writes |
+| omitted | the check's *content*, which differs per type — see the tables below |
+
+So under an `id:` of your own, everything except the entity and the type is an
+attribute you can edit in place: the `metric_aggregation` of a `custom_numeric`,
+the column of a `category_distribution`, a test's columns or its SQL, the mode,
+the segmentation, the partitioning column. Three things still replace the check, and each has a reason
+that will not go away:
+
+- **renaming the `id`** — it is the address, so a new one is a new check;
+- **moving the check to another entity** — the API refuses to point an existing
+  monitor at a different asset;
+- **changing its `type`** — a `volume` monitor that becomes a `freshness` monitor
+  measures something else, so neither its baseline nor its history means anything
+  under the new one.
+
+`id:` is optional, and **without one the content is the identity** — which is what
+lets two checks of the same type sit on one entity without either of them naming
+an id. The cost is that editing a field in that content replaces the check. The
+per-type content is: for a `custom_numeric` its `metric_aggregation`, for a
+`category_distribution` its column, for a test its columns and, for a
+`business_rule` or `business_query`, the SQL; plus, for every monitor, the mode,
+the time-partitioning expression and the segmentation expression.
+
+Two `field_stats` monitors on one entity are the exception: the content
+derivation does not include their `columns`, so a pair that differs only there
+gets the same id and the deploy fails on the duplicate. Give at least one of them
+an `id:`.
 
 So, for monitors:
 
-| Edit | Result |
-|---|---|
-| `severity`, `sensitivity`, thresholds, `timezone`, schedule | update in place |
-| the `metric_aggregation` of a `custom_numeric` | replace |
-| the column of a `category_distribution` | replace |
-| `time_partitioning_column`, segmentation | replace |
-| switch `anomaly_engine` ⇄ `fixed_thresholds` | replace |
-| move the monitor to a different entity | replace |
-| rename the `id` | replace |
+| Edit | With an `id:` | Without one |
+|---|---|---|
+| `severity`, `sensitivity`, thresholds, `timezone`, schedule, `name`, `description`, `filter`, `category` | update in place | update in place |
+| the `metric_aggregation` of a `custom_numeric` | update in place | replace |
+| the column of a `category_distribution` | update in place | replace |
+| `time_partitioning_column`, segmentation | update in place | replace |
+| switch `anomaly_engine` ⇄ `fixed_thresholds` | update in place | replace |
+| the `columns` of a `field_stats` | update in place | update in place |
+| move the monitor to a different entity | replace | replace |
+| change the monitor `type` | replace | replace |
+| rename the `id` | replace | — |
 
 And for tests:
 
-| Edit | Result |
+| Edit | With an `id:` | Without one |
+|---|---|---|
+| `severity`, recurrence, evaluators, `name`, `description`, `save_failures`, `category` | update in place | update in place |
+| the `values` of an `accepted_values`, the bounds of a `min_max` | update in place | update in place |
+| the `column`/`columns` a test names | update in place | replace |
+| the SQL of a `business_rule` or `business_query` | update in place | replace |
+| move the test to a different entity | replace | replace |
+| change the test `type` | replace | replace |
+| rename the `id` | replace | — |
+
+A deployment rule works the same way, and it matters more there than anywhere
+else: **deleting a deployment rule deletes every check it deployed.** For a
+`sql_tests` rule that means the tests go, with their check entities and their
+history, and nothing recreates them until the next scheduled sync. A monitor rule
+is gentler — its monitors survive as long as some rule still covers the asset —
+but the rule's own id changes, so every link and every `id=` someone held goes
+stale.
+
+| `id:` on a rule | What identifies the rule |
 |---|---|
-| `severity`, recurrence, evaluators | update in place |
-| the `values` of an `accepted_values`, the bounds of a `min_max` | update in place |
-| the `column`/`columns` a test names | replace |
-| the SQL of a `business_rule` or `business_query` | replace |
-| change the test type | replace |
-| rename the `id` | replace |
+| a name of your own | the namespace and that name, so the rule's `name:` becomes editable |
+| a UUID | itself, verbatim — `export` writes one |
+| omitted | the namespace and the rule's `name:`, so a rename replaces it |
 
-A deployment rule's identity is different, and simpler: **a deployment rule is
-identified by its `name` within its namespace.** That holds for both kinds and for
-a `deployment_exclusions` entry. Everything else about it — the `resolver_ql` it
-selects with, and whatever the kind carries to describe the checks it deploys — is
-an attribute you can edit.
+That holds for both kinds of rule and for a `deployment_exclusions` entry.
+Everything else — the `resolver_ql` it selects with, and whatever the kind carries
+to describe the checks it deploys — is an attribute. The two kinds carry different
+attributes, so the table names which fields belong to which; a field from the
+other kind is rejected, not ignored.
 
-A `sql_tests` rule may also carry an explicit **`id`**, which identifies it
-outright and survives a rename. It must be a UUID, and `export` writes one — so a
-rule created in the app round-trips into the config as the same rule. A name of
-your own in that field is rejected rather than reinterpreted; omit `id` and the
-`name` identifies the rule.
-
-The two kinds carry different attributes, so the table names which fields belong
-to which — a field from the other kind is rejected, not ignored.
-
-| Edit | Result |
-|---|---|
-| `resolver_ql` — broaden, narrow, or just reformat | update in place |
-| `severity` — either kind | update in place |
-| `metrics`, `sensitivity`, `delay_model` — `table_stats` only | update in place |
-| the `tests:` a rule deploys, plus `schedule`, `timezone`, `save_failures`, `keep_removed_tests` — `sql_tests` only | update in place |
-| `name` | replace |
+| Edit | With an `id:` | Without one |
+|---|---|---|
+| `resolver_ql` — broaden, narrow, or just reformat | update in place | update in place |
+| `severity` — either kind | update in place | update in place |
+| `metrics`, `sensitivity`, `delay_model` — `table_stats` only | update in place | update in place |
+| the `tests:` a rule deploys, plus `schedule`, `timezone`, `save_failures`, `keep_removed_tests` — `sql_tests` only | update in place | update in place |
+| `name` | update in place | replace |
 
 Updating a rule in place resyncs it: checks appear on assets the selection now
 matches, go away from assets it no longer matches, and assets that match both
-before and after keep the checks they already had, with their history. Replacing a
-rule does not — **deleting a deployment rule deletes every check it deployed**,
-with their history, so when you are iterating on a selection, edit the query and
-leave the `name` alone.
+before and after keep the checks they already had, with their history.
 
-A rule and an exclusion may share a name: they are two different things, and each
-keeps its own identity.
+One rule kind narrows the field: an entity-anchored `table_stats` monitor becomes
+a rule on that one asset, and there is one such rule per asset — so it is
+addressed by the asset, and its `id:` accepts only the UUID `export` writes for
+it, adopting that rule. A name of your own there is rejected rather than
+reinterpreted. Converting such a monitor into a query rule under
+`deployment_rules` is a different rule selecting differently, not an edit: expect
+a create and a delete.
 
-**`--dry-run` shows a replacement as a delete plus a create**, in the two separate
-sections of the plan. It is not labelled "rename", and nothing warns you, so the
-delete list is what you read to catch one.
+A rule and an exclusion may share a name, or an `id:`: they are two different
+things and each keeps its own identity.
 
-If you want a rename to be cosmetic, it has to be a field that is not in the
-identity list above. Otherwise accept that history restarts, or leave the id alone.
+**`--dry-run` names a monitor replacement**, on one line — `Replaced, id changed:
+<old> → <new>`, with what it discards and the fields that differ — and counts it as
+neither a create nor a delete. Anything on one asset and of one type that leaves as
+one monitor and arrives as one monitor is paired that way: a renamed `id:`, an edit
+to a monitor carrying no `id:`, or two unrelated monitors that happen to share the
+asset and the type. **Read the diff, not the word "Replaced"** — it is what says
+which of the three you are looking at, and the line above prints the new monitor's
+name, so a `name:` in the diff means the one going away had a different one. An
+entity move and a `type:` change stay a delete plus a create in the two sections of
+the plan, because both really are a different check. A replaced **test** or **rule**
+is a delete plus a create too, so read those two sections when you have edited an
+`id:` or a rule's `name:`.
 
 "Update in place" above means the check keeps its id and its history. A few of
 those updates keep the check but still discard what it has learned, which is the
@@ -336,24 +386,37 @@ next section.
 
 ---
 
-## 7. Resets: an update that still discards history
+## 7. Resets and re-runs: updates that are not free
 
-Some in-place updates keep the check but throw away what it has learned. The plan
-flags these, and they are worth pausing on: a monitor that resets has no anomaly
-baseline until it has collected enough history again, and during that window it is
-not really watching anything.
+Some in-place updates keep the check but disturb what it has. The plan flags
+these. What they cost is not the same for a monitor and for a test, and the two
+used to share one word.
 
-**A monitor resets when** its timezone changes, its schedule changes (type, or the
-time of day / minute of hour, or the delay), its time-partitioning interval
-changes, or a `category_distribution`'s `top_k_limit` changes.
+**A monitor reset discards the learned baseline.** It has no anomaly baseline
+until it has collected enough history again, and during that window it is not
+really watching anything. A monitor resets when its timezone changes, its mode
+changes (`anomaly_engine` ⇄ `fixed_thresholds`), its schedule changes (type, or
+the time of day / minute of hour, or the delay), its `metric_aggregation` or a
+`category_distribution`'s column or `top_k_limit` changes, its time-partitioning
+expression or interval changes, or its segmentation changes.
 
-**A test resets when** its recurrence, its severity, its evaluators, or its
-template body change — the last one meaning any test-specific field that is not
-one of the columns, such as the `values` of an `accepted_values` test or the
-bounds of a `min_max`.
+The mode, the `metric_aggregation`, a `category_distribution`'s column, the
+partitioning expression and the segmentation reach a reset only when the monitor
+carries an `id:`. Without one they are part of its identity, so the same edit
+replaces the monitor outright, which is strictly worse.
 
-Note the asymmetry, because it is not intuitive: **changing a test's severity
-resets it; changing a monitor's severity does not.**
+**A test re-run discards nothing.** A test has no learned state, so what the plan
+calls out is that the test will run again: it is re-armed and runs immediately
+rather than at its next scheduled slot. A test is re-armed when its recurrence,
+its severity, its evaluators, or its template body change — the last one meaning
+any test-specific field, including the columns it names, the `values` of an
+`accepted_values` or the bounds of a `min_max`. A test with no `schedule:`, run by
+something outside `synqcli`, is not re-armed at all; it runs at its next external
+trigger.
+
+What a test *does* lose is a replacement, from § 6: a new id means a new check
+entity, so its issues and its error runs are gone. That is the thing an `id:`
+buys, not the re-run.
 
 There is no flag to suppress a reset and no way to deploy the change without it.
 The choice is to accept it or to leave the field alone, so the useful thing an
@@ -543,12 +606,15 @@ This is time series data. Suggest tests for:
   deletion.
 - **Never export the whole workspace under a namespace and deploy it back.**
   `export --namespace` labels, it does not filter — see § 3.
-- **Never hand-assign check ids.** They are derived, and that derivation is what
-  makes a re-deploy an update instead of a duplicate.
-- **Never assume a rename is a rename.** Check it against § 6 first, and look for a
-  matching delete and create in the plan.
-- **Never self-confirm a reset.** If the plan says a check resets, say so and let
-  the person decide — the history it discards is not recoverable.
+- **Never invent a UUID for an `id:`.** A name of your own is the supported way to
+  address a check (§ 6); a UUID you made up addresses nothing and, on an
+  entity-anchored `table_stats` monitor, adopts a rule that does not exist. Copy a
+  UUID only from `export` or from the app.
+- **Never assume a rename is a rename.** Check it against § 6 first, and read the
+  replacement line and the delete list in the plan.
+- **Never self-confirm a monitor reset.** If the plan says a monitor resets, say so
+  and let the person decide — the baseline it discards is not recoverable. A test
+  that "will run again" discards nothing and needs no such pause.
 - **Never point a config at a workspace you have not confirmed.** `auth status`,
   and read the workspace line the command prints.
 - **Never edit the schema or the CLI reference by hand.** Both are generated.
@@ -561,8 +627,8 @@ This is time series data. Suggest tests for:
 |---|---|
 | The plan deletes checks you did not expect | Wrong `namespace`, or a file missing what the namespace already owns — export first |
 | The command hangs and prints nothing further | It is waiting on the confirmation prompt. Use `--dry-run`, or `--auto-confirm` |
-| A check was recreated instead of updated | Something in its identity changed — § 6 |
-| A check updated but lost its history | A reset — § 7 |
+| A check was recreated instead of updated | Its address changed — a renamed `id:`, another entity, another `type` — or it carries no `id:` and a field of its content changed. § 6 |
+| A monitor updated but lost its baseline | A reset — § 7 |
 | "managed by other configs" refuses everything | The ownership gate — § 8 |
 | An entity id does not resolve | § 2, and check the workspace before the spelling |
 | A check created in the app is now in your plan | Adoption, which is expected and one-way — § 8 |

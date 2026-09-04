@@ -744,8 +744,9 @@ Notes:
 - `schedule`, `timezone`, `severity` and `save_failures` are rule-level: they apply to
   every test the rule deploys. A test may override `severity`; the others cannot be set
   per test and are rejected there, because the deployed test has nowhere to carry them.
-- `name` is required on `business_rule` and `business_query` tests: it is the test's
-  identity across redeployments, so a renamed test is treated as a different test. For
+- `name` is required on `business_rule` and `business_query` tests. For a test a rule
+  deploys, it is also that test's identity across redeployments, so renaming it is a
+  different test — a test under `entities[].tests[]` carries an `id:` instead. For
   every other kind, leave it out and a name is generated from the test's kind and
   columns (`Unique on order_id`), the same as for a test under `entities[].tests[]`.
 - `id`, `category`, `governance_category` and `business_query` `evaluators` are not
@@ -754,18 +755,24 @@ Notes:
 - Rules covering the same table merge additively: each deploys the tests that are not
   there yet and never touches a test another rule owns. The deploy preview names the
   tests it skipped and the rule that owns them.
-- `id` is optional and identifies the rule outright when present. It must be a UUID —
-  a name of your own is rejected, not reinterpreted, because only a real id can
-  identify a rule across a rename. Leave it out when authoring by hand and the id is
-  derived from the namespace and the `name`. `export` writes it, so deploying an
+- `id` is optional and is the rule's address when present: a name of your own works,
+  and so does a UUID, which is used verbatim. `export` writes one, so deploying an
   exported config updates the rules it was exported from rather than creating copies
-  of them.
-- Without an `id`, a `sql_tests` rule is identified by its `name` within its
-  namespace — as is every deployment rule, `table_stats` and exclusions included —
-  so editing its `resolver_ql` updates the rule and resyncs it: tests appear on
-  tables the selection now matches, go away from tables it no longer matches, and
-  tables matching both before and after keep the tests they already had. Renaming a
-  rule replaces it instead, and deleting a rule deletes every test it deployed.
+  of them. With an `id`, renaming the rule is an update.
+- Without an `id`, a rule is identified by its `name` within its namespace — every
+  query-based rule under `deployment_rules`, both types, and every
+  `deployment_exclusions` entry — so renaming it replaces the rule.
+- The exception is the other `table_stats` shape: a `table_stats` monitor under an
+  entity covers that one asset and is addressed by it, so its `id` takes only the
+  UUID `export` writes and a name of your own is rejected there. See
+  ["How a check is identified"](#how-a-check-is-identified).
+- Either way, editing the `resolver_ql` updates the rule and resyncs it: tests appear
+  on tables the selection now matches, go away from tables it no longer matches, and
+  tables matching both before and after keep the tests they already had. Replacing a
+  rule is the expensive one: **deleting a `sql_tests` rule deletes every test it
+  deployed**, with their check entities and their history, and nothing recreates them
+  until the next scheduled sync — so give a rule an `id` before you need to rename
+  it.
 - A full example is
   [`examples/v1beta2/sql_test_deployment_rules.yaml`](examples/v1beta2/sql_test_deployment_rules.yaml).
 
@@ -1183,25 +1190,58 @@ Changing a category does not reset a monitor's learned baseline.
 
 ---
 
-## Test Lifecycle
+## Check Lifecycle
 
-### UUID Generation
+### How a check is identified
 
-Tests and monitors use deterministic UUID generation based on their configuration:
+A check's id is derived, deterministically, so redeploying the same file updates
+the checks instead of duplicating them. What the id is derived from is what
+decides whether an edit updates a check or **replaces** it — and a replacement
+deletes the old check, with its issue history and its error runs, and for a
+monitor with the baseline it has learned.
 
-- **Same configuration = Same UUID**: Redeploying with identical configuration updates the existing test
-- **Changed configuration = New UUID**: Changing critical fields creates a new test
+**Write an `id:` of your own and it is the check's address.** The id is then
+derived from the namespace, the entity, the check type and that `id:`, so every
+other field is editable in place. A UUID in `id:` is used verbatim, which is what
+`export` writes.
 
-### Test Reset Behavior
+One check narrows that: a `table_stats` monitor under an entity is a rule on that
+one asset, and there is one per asset, so the asset is its address. Its `id:`
+accepts only the UUID `export` writes for it — which adopts that rule — and a name
+of your own is rejected rather than reinterpreted.
 
-Tests are reset (re-triggered) when these fields change:
+**Omit `id:` and the check's content is its identity** — for a monitor its mode,
+partitioning and segmentation plus, for a `custom_numeric`, its
+`metric_aggregation` or, for a `category_distribution`, its column; for a test the
+columns it names and the SQL of a `business_rule` or `business_query`. Editing one
+of those fields then replaces the check.
 
-- Schedule/recurrence
-- Severity
-- Test type
-- Template configuration (columns, values, expressions, etc.)
+Three edits replace a check whichever way it is identified: renaming its `id:`,
+moving it to another entity, and changing its `type`.
 
-Tests are NOT reset when only metadata changes (name, description).
+`--dry-run` reports a renamed monitor as one line — `Replaced, id changed:` — and
+a replaced test or rule as a delete plus a create.
+
+The [agent guide](AGENTS.md) § 6 has the per-field tables, for monitors,
+tests and deployment rules.
+
+### Re-runs and resets
+
+Some in-place updates disturb what a check already has, and the deploy plan flags
+them.
+
+**A test re-run discards nothing.** A test has no learned state; changing its
+recurrence, severity, evaluators or template body re-arms it, so it runs
+immediately rather than at its next slot. A test with no `schedule:` is not
+re-armed at all.
+
+**A monitor reset discards its learned baseline**, and it has no anomaly baseline
+until it has collected enough history again. A monitor resets on a change to its
+timezone, its mode, its schedule, its `metric_aggregation`, a
+`category_distribution`'s column or `top_k_limit`, its time partitioning or its
+segmentation.
+
+Neither happens when only metadata changes (name, description, categories).
 
 ---
 
