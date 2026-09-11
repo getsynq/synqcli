@@ -755,6 +755,33 @@ Notes:
 - Rules covering the same table merge additively: each deploys the tests that are not
   there yet and never touches a test another rule owns. The deploy preview names the
   tests it skipped and the rule that owns them.
+- A test is deployed only onto the matched tables that have **every column it reads** —
+  the columns it checks, any `select_columns`, a `unique` or `relationships` test's
+  `time_partition_column`, and for `relationships` the columns on the referenced table
+  too. The other tables appear in the deploy plan as skipped tests, and no test is
+  created there: it could only fail every run against the warehouse. So a broad
+  selection is safe to write — a rule carrying three tests covers each table with the
+  ones that fit it.
+  - A test is skipped whole. `not_null` on `[email, account_id]` where only `account_id`
+    is missing is not narrowed to `email`: `unique(a, b)` is a different assertion from
+    `unique(a)`, and a narrowed test would carry a different identity and a name that
+    lies. Declare one test per column if you want that granularity.
+  - A table whose schema is not known yet keeps the tests it already carries — they are
+    left as they are and retried on the next sync rather than deleted. A test that is
+    not deployed there yet waits instead of being created, since whether the columns are
+    there cannot be answered either way. For a matched table that resolves once its
+    schema is ingested; a `relationships` test's **referenced** table is named by hand
+    and may never be ingested at all, in which case the test waits indefinitely and the
+    deploy plan says so, naming the referenced table.
+  - A column dropped from a table the rule still matches removes that table's test on
+    the next sync, and `keep_removed_tests` does not protect it — that flag is about the
+    table leaving the selection, not about the test losing what it reads. A table that
+    has already left the selection is a different case: `keep_removed_tests` freezes its
+    tests, the rule stops resyncing them altogether, and the column gate no longer
+    reaches them either. Such a test is yours to remove if it starts failing.
+  - A `business_rule` is checked on its `select_columns` only, and a `business_query` is
+    not checked at all — it declares no columns of its own. The columns their SQL reads
+    are never inspected, so a test of either kind deploys wherever the selection matches.
 - `id` is optional and is the rule's address when present: a name of your own works,
   and so does a UUID, which is used verbatim. `export` writes one, so deploying an
   exported config updates the rules it was exported from rather than creating copies

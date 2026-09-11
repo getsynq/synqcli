@@ -233,6 +233,11 @@ under its own `tests:`, onto every table or view the selection matches. On a
 `sql_tests` rule the schedule, timezone, severity and `save_failures` are
 rule-level and govern every test it deploys; a test may override only `severity`.
 
+A `sql_tests` rule deploys each test only onto the matched tables that have every
+column it reads, and the deploy plan lists the rest as skipped tests. So a broad
+selection is safe to write: a rule carrying three tests covers each table with
+the ones that fit it, and the plan says where they landed.
+
 `export` writes `sql_tests` rules back into the `deployment_rules` list, so a
 workspace that has them can be adopted with the loop in section 1. A
 `table_stats` rule is written as the single-asset `table_stats` monitors it
