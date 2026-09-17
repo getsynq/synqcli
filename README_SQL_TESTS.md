@@ -229,6 +229,73 @@ The `sql_query` of the `business_query` template is the SELECT that produces res
 
 > **Note:** Evaluators are only supported on `business_query` tests. Other test types do not accept the `evaluators:` field.
 
+## The `{{ table }}` placeholder
+
+`business_rule` and `business_query` carry SQL you write yourself, so nothing in
+them names the table unless you do. Write `{{ table }}` and it is replaced with
+the fully qualified name of the table the test is anchored to, quoted for your
+warehouse. It is the only supported placeholder — any other `{{ name }}` token is
+rejected when the test is saved.
+
+The substitution is textual, so the token is replaced everywhere it appears —
+inside a string constant or a comment as well as in a `FROM` clause. There is no
+escape; write the name out yourself if you need the literal text `{{ table }}` in
+a result.
+
+On a single test it saves repeating a name you already gave under `entities:`. On
+a `sql_tests` deployment rule it is the difference between a test and a copy: the
+rule deploys its `tests:` onto every table the selection matches, so without the
+placeholder all of them run the same query against whichever table you typed.
+
+```yaml
+deployment_rules:
+  - name: No negative order totals
+    type: sql_tests
+    resolver_ql: with_columns("total")
+    tests:
+      - type: business_query
+        name: Orders with a negative total
+        sql_query: |
+          SELECT * FROM {{ table }} WHERE total < 0
+```
+
+The placeholder renders a table name, so put it where a table name goes. In a
+`business_query` you own the whole statement, so you can alias it and qualify
+columns off that alias — which is what a correlated subquery needs:
+
+```yaml
+- type: business_query
+  name: Every order is in the audit log
+  sql_query: |
+    SELECT t.* FROM {{ table }} t
+    WHERE t.id NOT IN (SELECT id FROM audit a WHERE a.ref = t.id)
+```
+
+In a `business_rule` the `FROM` clause is generated for you and carries no alias,
+so the placeholder is for a subquery of your own rather than for qualifying a
+column:
+
+```yaml
+- type: business_rule
+  name: No order beats the running maximum
+  sql_expression: "total > (SELECT max(total) FROM {{ table }})"
+```
+
+Writing `{{ table }}.column` is not portable: on BigQuery the fully qualified name
+is a single quoted identifier and cannot qualify a column. Reach for
+`business_query` when you need to name the anchor's columns.
+
+Two things to know before you add one to a test that already exists:
+
+- The placeholder is stored unrendered and substituted per table, so one rule test
+  covers N tables and editing it is one edit.
+- A `business_rule` or `business_query` without an `id:` is identified by its
+  content, SQL included (see "How a test is identified"), so adding a placeholder
+  to a deployed test replaces it and it starts a fresh history. Give the test an
+  `id:` to edit it in place instead. A test a deployment rule deploys is identified
+  by its `name:`, so there the edit is in place either way — but renaming it mints
+  a new test.
+
 ## Configuration Reference
 
 For complete field specifications and validation rules, refer to the [published schema](https://schemas.synq.io/synq-monitors/v1/config.schema.json). You can also reference it from your YAML files for IDE support:

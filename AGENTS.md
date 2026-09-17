@@ -223,7 +223,12 @@ compatibility only. Do not author new files in it.
 **SQL test types** assert something is true right now: `not_null`, `empty`,
 `unique`, `accepted_values`, `rejected_values`, `min_max`, `min_value`,
 `max_value`, `freshness`, `relative_time`, `business_rule`, `business_query`,
-`relationships`.
+`relationships`. The two that carry SQL you write yourself — `business_rule` and
+`business_query` — accept `{{ table }}`, replaced with the anchored table's fully
+qualified name. On a `sql_tests` deployment rule that is what makes one query
+cover every matched table instead of being copied onto each of them; any other
+`{{ name }}` token is rejected on save. See
+[SQL tests](README_SQL_TESTS.md).
 
 **Deployment rules** (`deployment_rules`, and `deployment_exclusions` to carve
 assets back out) apply checks by *query* rather than by listing assets, so a new
