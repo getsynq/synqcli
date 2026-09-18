@@ -737,6 +737,14 @@ deployment_rules:
       - type: business_rule
         name: email looks like an address
         sql_expression: email NOT LIKE '%@%'
+      # Every matched table is checked against the same reference table: the
+      # rule cannot name a different reference per match.
+      - type: relationships
+        references:
+          - entity: ch-prod.default.customers
+            columns:
+              - source: customer_id
+                reference: id
 ```
 
 Notes:
@@ -755,6 +763,16 @@ Notes:
 - Rules covering the same table merge additively: each deploys the tests that are not
   there yet and never touches a test another rule owns. The deploy preview names the
   tests it skipped and the rule that owns them.
+- A `relationships` test in a rule names **one** reference table (per `references[]`
+  entry), and every matched table is checked against that same table — the star shape,
+  many tables carrying `customer_id` against one `dim.customers`. The reference is not
+  resolved per match: a rule cannot express "each `staging.X` against its own `raw.X`".
+  Write such tests under `entities[].tests[]`, one per table. The reference table must
+  be in the same integration as the matched tables, since the test runs on the matched
+  table's connection — nothing narrows the selection to that integration for you, so
+  confine it yourself (`with_integration_ids(...)`). A match in another integration gets
+  a test whose reference resolves on the wrong connection: it fails every run, or joins
+  a table that happens to share the name.
 - A test is deployed only onto the matched tables that have **every column it reads** —
   the columns it checks, any `select_columns`, a `unique` or `relationships` test's
   `time_partition_column`, and for `relationships` the columns on the referenced table

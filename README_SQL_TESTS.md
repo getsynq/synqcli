@@ -36,6 +36,8 @@ The following test types are supported:
 - **`freshness`** - Ensures data is updated within a specified time window
 - **`relative_time`** - Ensures temporal relationships between columns (e.g., ship_date >= order_date)
 - **`business_rule`** - Validates custom SQL expressions that represent business logic
+- **`business_query`** - Runs a full SELECT statement; every row it returns is a failure. Optional `evaluators` attach named, severity-tagged FAIL conditions
+- **`relationships`** - Ensures every value of the source columns exists in the reference table (referential integrity); one or more reference tables, each with source→reference column pairs. `references` names them (`entity`, plus `columns[].source` / `columns[].reference`); `ignore_nulls` and `select_columns` are optional, and so are `time_partition_column` with `time_window_seconds` — the window is applied only when both are set, while a deployment rule requires the partition column on every matched table either way, so setting it alone drops the test from the tables that lack it and filters nothing on the rest
 
 ## Examples
 

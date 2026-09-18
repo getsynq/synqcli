@@ -35,3 +35,13 @@ deployment_rules:
         # test's identity across redeployments of the rule.
         name: email looks like an address
         sql_expression: email NOT LIKE '%@%'
+      # Every matched table is checked against the same reference table: the
+      # rule cannot name a different reference per match. Keep the selection
+      # inside the reference table's integration — the test runs on the matched
+      # table's connection, and nothing narrows the selection for you.
+      - type: relationships
+        references:
+          - entity: ch-prod.default.customers
+            columns:
+              - source: customer_id
+                reference: id
