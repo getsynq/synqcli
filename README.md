@@ -545,7 +545,7 @@ entities:
         description: Ensure critical user identifiers are always present
         columns: [user_id, email]
     monitors:
-      - type: automated
+      - type: table_stats
         metrics: [ROW_COUNT, DELAY]
 ```
 
@@ -602,8 +602,8 @@ entities:
         relative_column: order_date
 
     monitors:
-      # Automated monitoring for volume, freshness, and delays
-      - type: automated
+      # Table health: row count, freshness and change delays
+      - type: table_stats
         metrics: [ROW_COUNT, DELAY, VOLUME_CHANGE_DELAY]
         severity: ERROR
         sensitivity: BALANCED
@@ -1027,12 +1027,20 @@ Monitors continuously track metrics and detect anomalies in your data.
 
 ### Monitor Types
 
-#### automated
+#### table_stats
 
-The simplest way to monitor table health. Tracks volume, freshness, and change delays automatically.
+The simplest way to monitor table health. Tracks row count, freshness and change
+delays from the table metadata the warehouse already keeps, so it runs no query
+over the table itself. Under an entity it covers that one asset — `sensitivity`
+applies to every metric, and a metric may override it.
+
+**It monitors tables, not views.** A view has no such metadata behind it, and
+the deploy does not refuse one: the rule is created and the monitor then has
+nothing to read. For what to use on a view instead, see
+[`custom_table_stats`](#custom_table_stats) below.
 
 ```yaml
-- type: automated
+- type: table_stats
   severity: ERROR
   sensitivity: BALANCED
   metrics:
@@ -1040,6 +1048,83 @@ The simplest way to monitor table health. Tracks volume, freshness, and change d
     - DELAY              # Monitor data freshness
     - VOLUME_CHANGE_DELAY # Monitor when data typically changes
 ```
+
+There is one `table_stats` entry per entity — a second is rejected. To vary
+sensitivity across the metrics, set it per metric instead of on the monitor:
+
+```yaml
+- type: table_stats
+  severity: ERROR
+  metrics:
+    - metric: ROW_COUNT
+      sensitivity: BALANCED
+    - metric: DELAY
+      sensitivity: PRECISE
+```
+
+Being a rule, it takes no `id:` of your own — see
+["How a check is identified"](#how-a-check-is-identified) — and no `mode`,
+`schedule`, `filter` or `segmentation`. To cover many assets with one rule
+instead of listing each, write a
+[query-based deployment rule](#query-based-deployment-rules); for the same
+metrics as an ordinary monitor, use `custom_table_stats` below.
+
+#### custom_table_stats
+
+The same three metrics as a `table_stats` rule, but authored as an ordinary
+monitor: it takes an `id:` of your own, a `name`, a `schedule`, a `mode`, a
+`timezone`, and there may be several on one entity.
+
+```yaml
+# All three metrics, monitor-level sensitivity
+- id: orders_table_stats
+  type: custom_table_stats
+  schedule: hourly
+  metrics: [ROW_COUNT, DELAY, VOLUME_CHANGE_DELAY]
+  sensitivity: BALANCED
+
+# Freshness read from a column you name, rather than from table metadata
+- id: orders_freshness_from_column
+  type: custom_table_stats
+  metrics:
+    - DELAY
+    - metric: ROW_COUNT
+      sensitivity: PRECISE
+  freshness_source:
+    field: updated_at
+```
+
+Leave `metrics` out and every metric is monitored.
+
+`freshness_source` says where "last loaded" comes from: `field:` names a
+timestamp column, `sql:` is an expression wrapped in `MAX(…)`
+(`COALESCE(updated_at, created_at)`). Without it the metric comes from table
+metadata, as it does for a `table_stats` rule.
+
+**Which of the two to use.** A `table_stats` rule is the cheaper one and covers
+tables; prefer it, and reach for `custom_table_stats` when you need a schedule,
+a mode, several table-stats monitors on one asset, or a freshness source of your
+own.
+
+**On a view, `freshness_source` is what makes any of these metrics real.** It
+is not only a freshness setting: it is what moves the whole monitor off the
+table metadata and onto a query against the asset, and `ROW_COUNT` rides along
+with it. Without one, a `custom_table_stats` monitor reads the same metadata a
+`table_stats` rule does, which a view does not have. The deploy enforces this
+for `DELAY` and `VOLUME_CHANGE_DELAY` only — they are rejected on a view with
+no `freshness_source` — so `metrics: [ROW_COUNT]` on a view is accepted and
+then reports whatever the warehouse says about a view it never counted, with no
+error to go on.
+
+So on a view: `custom_table_stats` with a `freshness_source` for `DELAY` or
+`VOLUME_CHANGE_DELAY`, and [`volume`](#volume) when row count is all you want —
+a `volume` monitor with no `expression` queries the asset for one whole-table
+count per run and needs no timestamp column to do it.
+
+Full examples:
+[`examples/v1beta2/custom_table_stats_monitor.yaml`](examples/v1beta2/custom_table_stats_monitor.yaml)
+and
+[`examples/v1beta2/freshness_source.yaml`](examples/v1beta2/freshness_source.yaml).
 
 #### volume
 
