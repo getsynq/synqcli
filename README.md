@@ -797,9 +797,11 @@ Notes:
     has already left the selection is a different case: `keep_removed_tests` freezes its
     tests, the rule stops resyncing them altogether, and the column gate no longer
     reaches them either. Such a test is yours to remove if it starts failing.
-  - A `business_rule` is checked on its `select_columns` only, and a `business_query` is
-    not checked at all — it declares no columns of its own. The columns their SQL reads
-    are never inspected, so a test of either kind deploys wherever the selection matches.
+  - A `business_rule` is gated on its `select_columns` alone: its SQL expression is
+    never parsed, so a rule whose expression reads `status` without declaring it
+    deploys anyway, while one that declares `select_columns: [status]` is skipped on
+    every table without that column. A `business_query` declares no columns of its
+    own and is never gated.
 - `id` is optional and is the rule's address when present: a name of your own works,
   and so does a UUID, which is used verbatim. `export` writes one, so deploying an
   exported config updates the rules it was exported from rather than creating copies
@@ -814,10 +816,11 @@ Notes:
 - Either way, editing the `resolver_ql` updates the rule and resyncs it: tests appear
   on tables the selection now matches, go away from tables it no longer matches, and
   tables matching both before and after keep the tests they already had. Replacing a
-  rule is the expensive one: **deleting a `sql_tests` rule deletes every test it
-  deployed**, with their check entities and their history, and nothing recreates them
-  until the next scheduled sync — so give a rule an `id` before you need to rename
-  it.
+  rule is the expensive one: **the old rule is deleted with every test it deployed**,
+  with their check entities and their history, and the next scheduled sync builds them
+  again from scratch — so give a rule an `id` before you need to rename it. Deleting a
+  rule outright is not the same: nothing declares it any more, so nothing brings its
+  tests back.
 - A full example is
   [`examples/v1beta2/sql_test_deployment_rules.yaml`](examples/v1beta2/sql_test_deployment_rules.yaml).
 

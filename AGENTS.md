@@ -335,11 +335,15 @@ And for tests:
 | rename the `id` | replace | — |
 
 A deployment rule works the same way, and it matters more there than anywhere
-else: **deleting a deployment rule deletes every check it deployed.** For a
-`sql_tests` rule that means the tests go, with their check entities and their
-history, and nothing recreates them until the next scheduled sync. A monitor rule
-is gentler — its monitors survive as long as some rule still covers the asset —
-but the rule's own id changes, so every link and every `id=` someone held goes
+else. **Deleting a `sql_tests` rule deletes every test the rule deployed**,
+together with those tests' check entities and their history. Nothing brings
+them back — not the tests, not their history.
+
+Renaming a rule that carries no `id:` replaces it: the old rule is deleted
+with everything it deployed, and the next scheduled sync builds the tests
+again from scratch under the new name. A monitor rule is gentler — its
+monitors survive as long as some rule still covers the asset — but the
+rule's own id changes, so every link and every `id=` someone held goes
 stale.
 
 | `id:` on a rule | What identifies the rule |
