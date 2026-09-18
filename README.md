@@ -634,7 +634,7 @@ entities:
 
       - type: business_rule
         description: Updated timestamp must be on or after creation timestamp
-        sql_expression: "created_at <= updated_at"
+        sql_expression: "created_at > updated_at"
 ```
 
 ### Schema Reference
@@ -666,10 +666,10 @@ A rendered, browsable version of the same schema is at
 ## Query-based deployment rules
 
 A monitor or test under an `entities[].id` targets a single asset. To cover many assets
-by a rule instead of listing each one, author query-based deployment rules at the top
-level with a [ResolverQL](https://docs.synq.io/monitors/deployment-rules) selection
-string — the same selection the app and the API expose. New assets that match are
-covered automatically, with no YAML edit.
+by a rule instead of listing each one, author
+[query-based deployment rules](https://docs.synq.io/monitors/deployment-rules) at the
+top level with a ResolverQL selection string — the same selection the app and the API
+expose. New assets that match are covered automatically, with no YAML edit.
 
 `type` says what the rule deploys: `table_stats` deploys monitors, `sql_tests` deploys
 SQL tests. Both kinds live in the same `deployment_rules` list.
@@ -725,7 +725,7 @@ deployment_rules:
   - name: PII email checks
     type: sql_tests
     resolver_ql: with_columns("email")
-    schedule: daily              # omit for on-demand; `{type: hourly, query_delay: 30m}` also works
+    schedule: daily              # omit to inherit `defaults.schedule`, else daily; `ondemand` deploys unscheduled
     timezone: Europe/London
     severity: ERROR
     save_failures: true
@@ -846,7 +846,7 @@ Ensures specified columns do not contain null values.
 
 #### empty
 
-Ensures specified columns are not empty strings.
+Ensures column values are not empty — a null or whitespace-only value counts as empty.
 
 ```yaml
 - type: empty
@@ -1024,17 +1024,17 @@ Validates custom SQL expressions that represent business logic. The expression s
 # Accounting equation must balance
 - type: business_rule
   description: Assets must equal liabilities plus equity (accounting equation)
-  sql_expression: "assets = liabilities + equity"
+  sql_expression: "assets != liabilities + equity"
 
 # Discount cannot exceed total
 - type: business_rule
   description: Discount amount cannot exceed order total
-  sql_expression: "discount_amount <= total_amount"
+  sql_expression: "discount_amount > total_amount"
 
 # Complex validation
 - type: business_rule
   description: Shipped orders must have a ship date
-  sql_expression: "status = 'shipped' AND ship_date IS NOT NULL OR status != 'shipped'"
+  sql_expression: "status = 'shipped' AND ship_date IS NULL"
 ```
 
 ---

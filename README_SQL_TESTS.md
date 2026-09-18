@@ -26,7 +26,7 @@ entities:
 The following test types are supported:
 
 - **`not_null`** - Ensures specified columns do not contain null values
-- **`empty`** - Ensures specified columns are empty
+- **`empty`** - Ensures column values are not empty — a null or whitespace-only value counts as empty
 - **`unique`** - Ensures column values are unique (optionally within a time window)
 - **`accepted_values`** - Ensures column values are within a predefined list of acceptable values
 - **`rejected_values`** - Ensures column values are not in a predefined list of rejected values
@@ -35,7 +35,7 @@ The following test types are supported:
 - **`max_value`** - Ensures column values are less than (or equal to) a maximum value
 - **`freshness`** - Ensures data is updated within a specified time window
 - **`relative_time`** - Ensures temporal relationships between columns (e.g., ship_date >= order_date)
-- **`business_rule`** - Validates custom SQL expressions that represent business logic
+- **`business_rule`** - Validates custom SQL expressions that represent business logic. The expression is a FAIL condition: a row is flagged when it evaluates to `TRUE`
 - **`business_query`** - Runs a full SELECT statement; every row it returns is a failure. Optional `evaluators` attach named, severity-tagged FAIL conditions
 - **`relationships`** - Ensures every value of the source columns exists in the reference table (referential integrity); one or more reference tables, each with source→reference column pairs. `references` names them (`entity`, plus `columns[].source` / `columns[].reference`); `ignore_nulls` and `select_columns` are optional, and so are `time_partition_column` with `time_window_seconds` — the window is applied only when both are set, while a deployment rule requires the partition column on every matched table either way, so setting it alone drops the test from the tables that lack it and filters nothing on the rest
 
@@ -279,8 +279,8 @@ column:
 
 ```yaml
 - type: business_rule
-  name: No order beats the running maximum
-  sql_expression: "total > (SELECT max(total) FROM {{ table }})"
+  name: Order predates the first shipped order
+  sql_expression: "created_at < (SELECT min(created_at) FROM {{ table }} WHERE status = 'shipped')"
 ```
 
 Writing `{{ table }}.column` is not portable: on BigQuery the fully qualified name

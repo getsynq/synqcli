@@ -96,7 +96,7 @@ entities:
 
       # Business rule test
       - type: business_rule
-        sql_expression: "assets = liabilities + equity"
+        sql_expression: "assets != liabilities + equity"
 
       # Business query test with evaluators: sql_query produces rows (grouped metrics),
       # each evaluator checks a named threshold condition against the computed columns.
