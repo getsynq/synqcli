@@ -184,21 +184,91 @@ Available Bedrock Claude models:
 
 ### DWH Connection (Optional)
 
-For enhanced test suggestions with data profiling, configure a database connection:
+With a warehouse connection, the advisor profiles your data before suggesting tests, so it can propose real accepted values and real bounds instead of guesses. Pass a connections file with `--connections`.
 
-**Via environment variables:**
-```bash
-export DWH_TYPE="postgres"           # postgres, mysql, bigquery, snowflake, clickhouse, redshift, databricks
-export DWH_HOST="localhost"
-export DWH_PORT="5432"
-export DWH_DATABASE="mydb"
-export DWH_USERNAME="user"
-export DWH_PASSWORD="pass"
-```
+The file uses the same `connections:` format as the Coalesce Quality DWH agent, and supports every warehouse the agent does: BigQuery, Snowflake, Databricks, Redshift, Postgres, MySQL, ClickHouse, Trino, SQL Server, Oracle, Microsoft Fabric and Athena. Every field of every warehouse is in the [configuration reference](https://schemas.synq.io/synq-dwh/v1/config.html).
 
-**Via connections file:**
 ```yaml
 # connections.yaml
+connections:
+  my-postgres:
+    postgres:
+      host: localhost
+      port: 5432
+      database: mydb
+      username: user
+      password: ${PG_PASSWORD}
+```
+
+`${VAR}` is replaced with the environment variable of that name, so secrets can stay out of the file. A `*_file` field, such as `private_key_file`, is read relative to the connections file.
+
+#### Snowflake
+
+**Password:**
+```yaml
+connections:
+  my-snowflake:
+    snowflake:
+      account: myaccount.us-east-1     # Account identifier, with the region if your account needs it
+      warehouse: COMPUTE_WH
+      role: ANALYST
+      username: myuser
+      password: ${SNOWFLAKE_PASSWORD}
+      databases: ["PROD", "DEV"]       # Optional: limit to these databases
+      use_get_ddl: true                # Optional: read view definitions with GET_DDL
+```
+
+**Key pair:**
+```yaml
+connections:
+  my-snowflake-key:
+    snowflake:
+      account: myaccount.us-east-1
+      warehouse: COMPUTE_WH
+      role: ANALYST
+      username: myuser
+      private_key_file: ./rsa_key.p8
+      private_key_passphrase: ${SNOWFLAKE_KEY_PASSPHRASE}   # Only if the key is encrypted
+      databases: ["PROD"]
+```
+
+**SSO in the browser (`externalbrowser`):**
+
+If your organization signs in to Snowflake through an identity provider (Okta, Microsoft Entra ID and so on), let the advisor open the browser:
+
+```yaml
+connections:
+  my-snowflake-sso:
+    snowflake:
+      account: myaccount.us-east-1
+      warehouse: COMPUTE_WH
+      role: ANALYST
+      username: myuser@company.com     # Your SSO username or email
+      auth_type: externalbrowser
+      databases: ["PROD"]
+```
+
+The first connection opens your default browser for the SSO sign-in. The token Snowflake returns is cached in your operating system's credential store (Keychain on macOS, Credential Manager on Windows; on Linux a file, which you have to opt in to), so later connections reuse it until it expires, after about four hours. Then the browser opens again.
+
+This needs ID token caching enabled on the Snowflake account, and your identity provider set up in Snowflake:
+
+```sql
+ALTER ACCOUNT SET ALLOW_ID_TOKEN = TRUE;
+```
+
+```bash
+synqcli advisor \
+  --entity-id "snowflake::PROD::ANALYTICS::ORDERS" \
+  --instructions "Suggest data quality tests" \
+  --connections ./connections.yaml
+```
+
+#### The older formats
+
+Earlier releases read a list of connections, and environment variables for a single one. Both still work, but only for BigQuery, Postgres, MySQL, Snowflake with a password, ClickHouse, Redshift and Databricks, and they won't learn new warehouses or options. Move to the `connections:` format above when you can.
+
+```yaml
+# connections.yaml, list format
 - id: my-postgres
   type: postgres
   host: localhost
@@ -208,86 +278,14 @@ export DWH_PASSWORD="pass"
   password: pass
 ```
 
-#### Snowflake Configuration
-
-Snowflake supports multiple authentication methods:
-
-**Password authentication:**
-```yaml
-# connections.yaml
-- id: my-snowflake
-  type: snowflake
-  account: myaccount.us-east-1     # Account identifier (with region if needed)
-  warehouse: COMPUTE_WH
-  role: ANALYST
-  username: myuser
-  password: mypassword
-  databases: ["PROD", "DEV"]       # Optional: limit to specific databases
-  use_get_ddl: true                # Optional: use GET_DDL for view definitions
-```
-
-**Private key authentication:**
-```yaml
-# connections.yaml
-- id: my-snowflake-key
-  type: snowflake
-  account: myaccount.us-east-1
-  warehouse: COMPUTE_WH
-  role: ANALYST
-  username: myuser
-  private_key_file: /path/to/rsa_key.p8
-  private_key_passphrase: optional-passphrase  # If key is encrypted
-  databases: ["PROD"]
-```
-
-**SSO/Browser authentication (externalbrowser):**
-
-For organizations using SSO (Okta, Azure AD, etc.), use browser-based authentication:
-
-```yaml
-# connections.yaml
-- id: my-snowflake-sso
-  type: snowflake
-  account: myaccount.us-east-1
-  warehouse: COMPUTE_WH
-  role: ANALYST
-  username: myuser@company.com     # Your SSO username/email
-  auth_type: externalbrowser       # Triggers browser-based SSO
-  databases: ["PROD"]
-```
-
-Or via environment variables:
 ```bash
-export DWH_TYPE="snowflake"
-export DWH_ACCOUNT="myaccount.us-east-1"
-export DWH_WAREHOUSE="COMPUTE_WH"
-export DWH_ROLE="ANALYST"
-export DWH_USERNAME="myuser@company.com"
-export DWH_AUTH_TYPE="externalbrowser"
-```
-
-**How SSO authentication works:**
-1. First connection opens your default browser for SSO login
-2. After successful login, the ID token is cached in your OS credential manager:
-   - macOS: Keychain
-   - Windows: Credential Manager
-   - Linux: File-based (requires explicit opt-in)
-3. Subsequent connections reuse the cached token (valid for ~4 hours)
-4. When token expires, browser opens again for re-authentication
-
-**Requirements for SSO:**
-- Your Snowflake account must have ID token caching enabled:
-  ```sql
-  ALTER ACCOUNT SET ALLOW_ID_TOKEN = TRUE;
-  ```
-- Your organization's IdP must be configured in Snowflake
-
-Example usage with SSO:
-```bash
-synqcli advisor \
-  --entity-id "snowflake::PROD::ANALYTICS::ORDERS" \
-  --instructions "Suggest data quality tests" \
-  --connections ./connections.yaml
+# Environment variables, used when --connections is not given
+export DWH_TYPE="postgres"           # postgres, mysql, bigquery, snowflake, clickhouse, redshift or databricks
+export DWH_HOST="localhost"
+export DWH_PORT="5432"
+export DWH_DATABASE="mydb"
+export DWH_USERNAME="user"
+export DWH_PASSWORD="pass"
 ```
 
 ---
