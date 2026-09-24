@@ -705,7 +705,10 @@ Notes:
   different things.
 - `resolver_ql` is the only selection form supported here. The string is forwarded
   verbatim; the backend compiles and validates it, so an invalid query fails at deploy
-  time.
+  time. What is stored is the compiled selection, not the text, so reformatting a
+  query or spelling it differently is not a change: when the credential can read
+  entities, the deploy preview compares selections rather than strings. A type alias such as `"table"` is expanded to the types it
+  names when the rule is deployed, so redeploy the rule to pick up a type added later.
 - Query rules are authoring-only: `export` does not emit them (it writes single-asset
   `entities` rules). A full example is
   [`examples/v1beta2/query_deployment_rules.yaml`](examples/v1beta2/query_deployment_rules.yaml).
