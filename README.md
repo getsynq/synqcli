@@ -1219,6 +1219,12 @@ Monitors custom SQL aggregations.
     anomaly_engine:
       sensitivity: HIGH
 
+# A value that can never be negative: the anomaly engine never forecasts below 0
+- id: daily_signups
+  type: custom_numeric
+  metric_aggregation: "COUNT(DISTINCT user_id)"
+  never_negative: true
+
 # Monitor with segmentation
 - id: revenue_by_country
   type: custom_numeric

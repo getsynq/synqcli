@@ -312,7 +312,7 @@ So, for monitors:
 
 | Edit | With an `id:` | Without one |
 |---|---|---|
-| `severity`, `sensitivity`, thresholds, `timezone`, schedule, `name`, `description`, `filter`, `category` | update in place | update in place |
+| `severity`, `sensitivity`, thresholds, `timezone`, schedule, `name`, `description`, `filter`, `category`, the `never_negative` of a `custom_numeric` | update in place | update in place |
 | the `metric_aggregation` of a `custom_numeric` | update in place | replace |
 | the column of a `category_distribution` | update in place | replace |
 | `time_partitioning_column`, segmentation | update in place | replace |
