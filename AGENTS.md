@@ -70,9 +70,13 @@ what the table is called in the warehouse, and it is matched only for ids the
 first lookup did not find.
 
 **Resolution can only succeed for an asset the platform already knows about**, and
-only for a table, a view or an equivalent model — a dashboard or a job is not a
-monitorable entity, so an id that names one fails the same way a nonexistent one
-does.
+only for a table, a view or an equivalent model. An id that names the same asset
+under another integration — a Coalesce node or a dbt model, for example — is
+accepted and resolves to that warehouse table, or its view when there is no table,
+so the file can carry either. When such an id is written as a full `::` path,
+`deploy` prints the replacement as `<id> → <path>`. Any other known entity that is
+not a table or view — a dashboard, a job — is not monitorable, and fails with the
+message below.
 
 **Get real ids rather than constructing them.** Two reliable sources:
 
@@ -101,7 +105,16 @@ The following entity IDs resolved to multiple entities:
 
 A short or coordinate-shaped id matched more than one asset. The fix is to replace
 it with one of the full paths listed underneath — they are printed precisely so
-they can be pasted back into the file.
+they can be pasted back into the file. A Coalesce node or dbt model that builds
+several views and no table is reported the same way.
+
+```
+coalesce-prod::env::node-1 (coalesce node) has no warehouse table or view to monitor
+```
+
+The id names a real asset, but nothing in the warehouse that a check can run
+against — a node that has not been materialised, or an asset that is not a table at
+all. Point the check at the table or view itself.
 
 **An unresolved id fails the whole run**, including `--dry-run`, and no plan is
 printed. Fix every id before expecting to see a plan at all.
@@ -490,6 +503,7 @@ whoever maintains it there.
 |---|---|
 | An entity id could not be resolved | § 2 — the asset is unknown, or you are on the wrong workspace |
 | An entity id resolved to multiple entities | § 2 — use one of the full paths it lists |
+| An entity id has no warehouse table or view to monitor | § 2 — it names an asset that is not a table; use the table or view itself |
 | Duplicate checks | Two entries in the file reduce to the same identity. Give them different columns, expressions or ids |
 | A validation error | The message names the field. Check it against the schema |
 | A field is rejected as unknown | Unknown keys are errors, not warnings. Usually a misspelling or a v1beta1 field in a v1beta2 file |
