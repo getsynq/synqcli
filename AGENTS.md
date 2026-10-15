@@ -231,7 +231,8 @@ compatibility only. Do not author new files in it.
 
 **Monitor types** watch an asset over time and learn what normal looks like:
 `volume`, `freshness`, `field_stats`, `custom_numeric`, `category_distribution`,
-`table_stats`, `custom_table_stats`.
+`table_stats`, `custom_table_stats`. A `field_stats` column can carry its own
+metric selection, each metric with its own sensitivity.
 
 **SQL test types** assert something is true right now: `not_null`, `empty`,
 `unique`, `accepted_values`, `rejected_values`, `min_max`, `min_value`,
@@ -331,6 +332,7 @@ So, for monitors:
 | `time_partitioning_column`, segmentation | update in place | replace |
 | switch `anomaly_engine` ⇄ `fixed_thresholds` | update in place | replace |
 | the `columns` of a `field_stats` | update in place | update in place |
+| the metrics of a `field_stats` column | update in place | update in place |
 | move the monitor to a different entity | replace | replace |
 | change the monitor `type` | replace | replace |
 | rename the `id` | replace | — |

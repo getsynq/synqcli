@@ -23,6 +23,12 @@ entities:
         columns:
           - total_revenue
           - total_tips
+          - column: payment_type
+            metrics: [PCT_NULL, NUM_UNIQUE]
+          - column: total_fees
+            metrics:
+              - MEAN
+              - { metric: PCT_NULL, sensitivity: PRECISE }
         mode:
           anomaly_engine:
             sensitivity: BALANCED

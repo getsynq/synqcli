@@ -618,7 +618,8 @@ entities:
         type: field_stats
         columns:
           - total_amount
-          - discount_amount
+          - column: discount_amount
+            metrics: [PCT_NULL, MEAN]
 
   - id: bq-prod.dataset.customers
     tests:
@@ -1189,13 +1190,31 @@ Monitors column-level statistics including null rates, distinct values, and min/
 - id: customer_stats
   type: field_stats
   columns:
-    - email
-    - status
-    - created_at
+    - email                              # every metric of the column's type
+    - column: status
+      metrics: [PCT_NULL, NUM_UNIQUE]    # sensitivity from mode.anomaly_engine
+    - column: amount
+      metrics:
+        - MEAN
+        - { metric: PCT_NULL, sensitivity: PRECISE }
   mode:
     anomaly_engine:
       sensitivity: BALANCED
 ```
+
+- A plain column name monitors every metric available for the column's data type.
+- `column` with `metrics` restricts what is predicted to the listed metrics.
+- A metric is an id string or `{metric, sensitivity}`. A metric's `sensitivity` overrides the monitor's `mode.anomaly_engine.sensitivity`, which overrides `defaults.mode`, which falls back to `BALANCED`.
+- A metric must exist for the column's data type, otherwise the deploy is rejected. A column or a metric listed twice is an error.
+- Changing the selection updates the monitor in place: it does not reset the monitor or change its id. A removed metric stops being predicted, and adding it back resumes its history.
+- Redshift does not compute `NUM_UNIQUE` or `PCT_UNIQUE` on numeric columns, so they are skipped there.
+- The order of the metrics never shows as a change.
+
+| Column data type | Metrics |
+|---|---|
+| String | `NUM_ROWS`, `NUM_UNIQUE`, `NUM_EMPTY`, `NUM_NULL`, `PCT_NULL`, `PCT_UNIQUE`, `PCT_EMPTY` |
+| Numeric, integer, float | the string metrics plus `MEAN`, `MIN`, `MAX`, `MEDIAN`, `STDDEV` |
+| Date, datetime, time, timestamp | `NUM_ROWS`, `NUM_NULL`, `NUM_UNIQUE`, `MIN`, `MAX`, `PCT_NULL`, `PCT_UNIQUE` |
 
 #### custom_numeric
 
