@@ -140,6 +140,10 @@ entities:
         save_failures: false   # override: disable for this test
 ```
 
+Failing rows are stored in the integration's audit table, so `save_failures` takes
+effect only once the integration has an audit table configured. Until then the test
+is still deployed with the setting, and `deploy` prints a warning for each such test.
+
 Changing `save_failures` does not discard a test's historical results — no edit to
 a test does. Only replacing the test does, and only because the replacement is a
 different check.
