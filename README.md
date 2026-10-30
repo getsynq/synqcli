@@ -99,6 +99,7 @@ For interactive use, log in through the browser once:
 ```bash
 synqcli auth login             # EU, the default deployment
 synqcli auth login --region us # or au
+synqcli auth login --coalesce  # with your Coalesce account
 synqcli auth status
 ```
 

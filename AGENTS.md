@@ -528,6 +528,9 @@ synqcli deploy config.yaml --auto-confirm
   `QUALITY_CLIENT_ID` / `QUALITY_CLIENT_SECRET` (or a pre-issued `QUALITY_TOKEN`);
   a `.env` file in the working directory; a cached browser login. Client
   credentials beat a cached login, so CI is unaffected by whoever logged in last.
+  `synqcli auth login --coalesce [--organization <org-id>]` caches a login with
+  your Coalesce account instead, carrying your Coalesce Quality roles in the
+  organization's workspace rather than consented permissions.
 - **The deployment** is named, not spelled out: `--region eu|us|au`, or
   `--endpoint` for a self-hosted one. `synqcli auth login` remembers the choice and
   `synqcli auth use <region>` switches it, so later commands need no flag. **A
