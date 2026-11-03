@@ -138,50 +138,21 @@ so adding a browser login cannot change what an existing pipeline authenticates 
 
 ### Advisor Credentials
 
-For the `advisor` command, you need an OpenAI-compatible API key or AWS Bedrock credentials:
+The `advisor` command calls an OpenAI-compatible API. Set `OPENAI_API_KEY`:
 
-**OpenAI (default):**
 ```bash
 export OPENAI_API_KEY="your-api-key"
 ```
 
-**Custom endpoint (LiteLLM, Azure, etc.):**
+To use another endpoint, set `OPENAI_BASE_URL`. To select the model, set `OPENAI_MODEL`:
+
 ```bash
 export OPENAI_API_KEY="your-api-key"
 export OPENAI_BASE_URL="https://your-endpoint.com/v1"
+export OPENAI_MODEL="your-model-name"
 ```
 
-**AWS Bedrock (direct):**
-
-To use Claude models hosted on AWS Bedrock directly:
-
-```bash
-# Set the Bedrock model ID (required for Bedrock)
-export AWS_BEDROCK_MODEL_ID="anthropic.claude-sonnet-4-20250514-v1:0"
-
-# Set the AWS region (optional, defaults to us-east-1)
-export AWS_REGION="us-east-1"
-
-# AWS credentials are loaded from the standard AWS credential chain:
-# - Environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN)
-# - Shared credentials file (~/.aws/credentials)
-# - IAM roles (when running on AWS infrastructure)
-```
-
-Example usage:
-```bash
-AWS_BEDROCK_MODEL_ID="anthropic.claude-sonnet-4-20250514-v1:0" \
-AWS_REGION="us-east-1" \
-  synqcli advisor \
-  --entity-id "postgres::public::users" \
-  --instructions "Suggest data quality tests"
-```
-
-Available Bedrock Claude models:
-- `anthropic.claude-sonnet-4-20250514-v1:0` (Claude Sonnet 4)
-- `anthropic.claude-3-5-sonnet-20241022-v2:0` (Claude 3.5 Sonnet v2)
-- `anthropic.claude-3-5-sonnet-20240620-v1:0` (Claude 3.5 Sonnet)
-- `anthropic.claude-3-haiku-20240307-v1:0` (Claude 3 Haiku)
+To use models hosted on AWS Bedrock, Azure or another provider, run an OpenAI-compatible proxy such as [LiteLLM](https://docs.litellm.ai/) in front of the provider. Then set `OPENAI_BASE_URL` to the proxy and `OPENAI_MODEL` to a model name that the proxy serves.
 
 ### DWH Connection (Optional)
 
