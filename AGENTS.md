@@ -1,21 +1,13 @@
 # Driving `synqcli`
 
-This is the operating guide for a coding agent using `synqcli` to declare data
-quality monitors, SQL tests and deployment rules as code: the loop to follow, how
-to read what it prints, the refusals and what each one actually means, and the
-mistakes that cost real time. It is written to be acted on top-down.
+This guide is for a coding agent that uses `synqcli` to declare data quality monitors, SQL tests and deployment rules as code. It gives the loop to follow, how to read the output, what each refusal means, and the mistakes that cost the most time. Follow it from the top.
 
-**`synqcli deploy` reconciles a workspace with a YAML file.** You declare which
-monitors and tests belong on which assets; `deploy` makes the workspace match.
-That means it creates, it updates, and **it deletes** — anything the file's
-namespace owns that the file no longer declares is removed. Understanding that one
-sentence prevents most of the damage this tool can do.
+`synqcli deploy` reconciles a workspace with a YAML file. You declare which monitors and tests belong on which assets, and `deploy` makes the workspace match. So it creates, it updates, and it deletes: it removes anything that the namespace of the file owns and the file no longer declares. If you remember this, you prevent most of the damage that this tool can do.
 
-Two more facts decide almost everything else, and both are covered in full below.
-A check is addressed by its `id:` — write one and the rest of the check is
-editable, leave it out and its content is its identity, so some edits replace the
-check instead of updating it. And a check belongs to exactly one namespace, so
-pointing a second config at it is refused rather than merged.
+Two more facts control almost everything else (§ 3, § 6):
+
+- The `id:` of a check is its address. With an `id:`, you can edit the rest of the check. Without one, the content of the check is its identity, so some edits replace the check.
+- A check belongs to exactly one namespace. If a second config declares it, `deploy` refuses. It does not merge.
 
 ---
 
@@ -29,60 +21,47 @@ synqcli deploy config.yaml                 # 4. apply, after the same plan is sh
 synqcli deploy config.yaml --dry-run       # 5. confirm the plan is now empty
 ```
 
-Step 5 is not ceremony. An empty plan is the only proof that the file and the
-workspace agree, and therefore that the file is now the source of truth. Anything
-else means the next person to run `deploy` gets changes they did not write.
+Do not skip step 5. An empty plan is the only proof that the file and the workspace agree, and that the file is now the source of truth. If the plan is not empty, the next person who runs `deploy` gets changes that they did not write.
 
-**Get the schema into the editor first.** It is the field-level reference, and it
-is authoritative in a way prose is not:
+Get the schema into the editor first. It is the field reference, and it has more authority than any prose:
 
 ```bash
 synqcli schema > schema.json
 ```
 
-Then start every config file with the line that binds it, which gives completion
-and validation as you type:
+Start every config file with this line. It gives completion and validation while you type:
 
 ```yaml
 # yaml-language-server: $schema=https://schemas.synq.io/synq-monitors/v1/config.schema.json
 ```
 
-The same schema is served at that URL, so the local copy is optional.
+The URL serves the same schema, so the local copy is optional.
 
 ---
 
 ## 2. Entity ids: resolve them, never guess them
 
-This is the most common failure, and the one the CLI can help with least. A wrong
-id is not a typo it can correct — the asset simply is not there.
+A wrong entity id is the most common failure, and the CLI can help with it the least. A wrong id is not a typo that it can correct: the asset is not there.
 
-An entity id in the YAML is written in one of three forms, and all three are
-resolved against the workspace before anything is deployed:
+You can write an entity id in three forms. `deploy` resolves all three against the workspace before it deploys anything:
 
 | Form | Example | Resolved by |
 |---|---|---|
 | Full path, `::` separated | `ch-prod::default::runs` | direct lookup |
-| Full path, dot separated | `ch-prod.default.runs` | dots are converted to `::`, then looked up |
+| Full path, dot separated | `ch-prod.default.runs` | dots are changed to `::`, then looked up |
 | Warehouse coordinates (SQL FQN) | `analytics.public.orders` | matched against known warehouse objects |
 
-The first two are the same thing written two ways. The third is different: it is
-what the table is called in the warehouse, and it is matched only for ids the
-first lookup did not find.
+The first two forms are the same path. The third is the name of the table in the warehouse. It is matched only for ids that the first lookup did not find.
 
-**Resolution can only succeed for an asset the platform already knows about**, and
-only for a table, a view or an equivalent model. An id that names the same asset
-under another integration — a Coalesce node or a dbt model, for example — is
-accepted and resolves to that warehouse table, or its view when there is no table,
-so the file can carry either. When such an id is written as a full `::` path,
-`deploy` prints the replacement as `<id> → <path>`. Any other known entity that is
-not a table or view — a dashboard, a job — is not monitorable, and fails with the
-message below.
+Resolution works only for an asset that the platform already knows, and only for a table, a view or an equivalent model.
 
-**Get real ids rather than constructing them.** Two reliable sources:
+- An id of the same asset under another integration (a Coalesce node or a dbt model) is accepted. It resolves to the warehouse table, or to its view if there is no table. If you write such an id as a full `::` path, `deploy` prints the replacement as `<id> → <path>`.
+- Other known entities (a dashboard, a job) cannot be monitored and fail with the message below.
 
-- `synqcli export --source all out.yaml` and read the `entities[].id` values it
-  writes. They are already in the simplified form the config accepts.
-- The asset's page in the web app, which shows the same path.
+Get real ids. Do not construct them. Two sources are reliable:
+
+- Run `synqcli export --source all out.yaml` and read the `entities[].id` values. They are already in the form that the config accepts.
+- The page of the asset in the web app shows the same path.
 
 ### Reading the failure
 
@@ -91,9 +70,7 @@ The following entity IDs could not be resolved:
   - ch-prod.default.runz
 ```
 
-The id names nothing in this workspace. Either it is misspelled, the asset has not
-been ingested yet, or — much more often than it looks — you are pointed at the
-wrong workspace. Check `auth status` before you check the spelling.
+The id names nothing in this workspace. It is misspelled, or the asset is not ingested yet, or (more often than it seems) you are on the wrong workspace. Check `auth status` before you check the spelling.
 
 ```
 The following entity IDs resolved to multiple entities:
@@ -103,21 +80,15 @@ The following entity IDs resolved to multiple entities:
   Please specify more specific entity IDs to resolve to a single entity.
 ```
 
-A short or coordinate-shaped id matched more than one asset. The fix is to replace
-it with one of the full paths listed underneath — they are printed precisely so
-they can be pasted back into the file. A Coalesce node or dbt model that builds
-several views and no table is reported the same way.
+A short or coordinate-shaped id matched more than one asset. Replace it with one of the full paths listed below it. They are printed so that you can paste them into the file. A Coalesce node or dbt model that builds several views and no table gives the same message.
 
 ```
 coalesce-prod::env::node-1 (coalesce node) has no warehouse table or view to monitor
 ```
 
-The id names a real asset, but nothing in the warehouse that a check can run
-against — a node that has not been materialised, or an asset that is not a table at
-all. Point the check at the table or view itself.
+The id names a real asset, but nothing in the warehouse that a check can run against: a node that is not materialised, or an asset that is not a table. Point the check at the table or view itself.
 
-**An unresolved id fails the whole run**, including `--dry-run`, and no plan is
-printed. Fix every id before expecting to see a plan at all.
+An unresolved id fails the whole run, also `--dry-run`, and no plan is printed. Fix every id before you expect a plan.
 
 ---
 
@@ -127,58 +98,38 @@ printed. Fix every id before expecting to see a plan at all.
 namespace: "team-analytics"
 ```
 
-`namespace` groups checks so that different teams reconcile independently. It is
-the single most consequential field in the file:
+`namespace` groups checks, so that different teams reconcile independently. It is the most important field in the file:
 
-- **Deleting is scoped to it.** `deploy` removes checks that this namespace owns
-  and the file no longer declares. It never touches another namespace's checks.
-- **A missing `namespace` is itself a namespace** — the default one — not an
-  absence of grouping.
-- **Getting it wrong is not a no-op.** A typo means "this namespace declares
-  nothing that it used to own", which is a request to delete, not a request to
-  skip.
-- Several files may share one namespace. They are parsed together and reconciled
-  as one unit, so a plan for a namespace reflects every file that declares it.
+- Deletes are limited to it. `deploy` removes checks that this namespace owns and that the file no longer declares. It never changes the checks of another namespace.
+- A missing `namespace` is also a namespace, the default one. It is not "no grouping".
+- A wrong namespace is not a no-op. A typo means "this namespace declares nothing that it owned before", which is a request to delete.
+- Several files can share one namespace. They are parsed together and reconciled as one unit, so the plan for a namespace includes every file that declares it.
 
-`deploy --namespace <name>` filters which namespaces in the parsed files are acted
-on; it is repeatable. It does not change what a namespace owns, only which of them
-this run processes.
+`deploy --namespace <name>` selects which namespaces of the parsed files this run processes. You can repeat it. It does not change what a namespace owns.
 
-**`export --namespace` is a different thing entirely.** On `export`, `--namespace`
-is the value *written into* the generated YAML — a label, not a filter. `export`
-has no namespace filter, so it returns everything matching the other scopes and
-stamps whichever namespace you named onto all of it. Exporting the whole workspace
-under a namespace and deploying that file back is how one config comes to claim
-checks that belonged to five others.
+`export --namespace` is a different thing. On `export`, `--namespace` is the value written into the generated YAML: a label, not a filter. `export` has no namespace filter. It returns everything that matches the other scopes and writes your namespace onto all of it. If you export the whole workspace under one namespace and deploy that file, one config takes the checks of all other configs.
 
 ---
 
 ## 4. `--dry-run` and the confirmation prompt are not the same thing
 
-They read as one thing and are not:
+- `--dry-run` computes and prints the plan, then exits without a deploy. It never prompts, and it writes nothing.
+- Without `--dry-run`, the same plan is printed. Then the run asks, per namespace, if it applies the plan. Any answer other than `y` cancels that namespace, and the run continues with the next one.
+- `--auto-confirm` answers `y` for you. The plan is still printed, but nobody reviews it.
 
-- `--dry-run` computes and prints the plan, then **exits without deploying**. It
-  never prompts. Nothing is written.
-- Without `--dry-run`, the same plan is printed and then the run **asks**, per
-  namespace, whether to apply it. Answering anything other than `y` cancels that
-  namespace and moves to the next.
-- `--auto-confirm` answers `y` for you. The plan is still printed; nothing is
-  reviewing it.
+This is important for an agent:
 
-For an agent this matters twice over. **Without `--auto-confirm` a non-interactive
-run blocks on the prompt** — it does not proceed, and it does not fail. And
-`--auto-confirm` does not skip the review step so much as remove it, which is only
-safe when a `--dry-run` of the same file was read first.
+- Without `--auto-confirm`, a non-interactive run waits on the prompt. It does not continue and it does not fail.
+- `--auto-confirm` removes the review step. It is safe only after you read a `--dry-run` of the same file.
 
-The order that is both non-blocking and reviewed:
+The order that does not block and is reviewed:
 
 ```bash
-synqcli deploy config.yaml --dry-run     # read this output — it is the review
+synqcli deploy config.yaml --dry-run     # read this output, it is the review
 synqcli deploy config.yaml --auto-confirm
 ```
 
-`--dry-run` and `--auto-confirm` together are accepted and mean `--dry-run`:
-nothing is deployed.
+`--dry-run` and `--auto-confirm` together mean `--dry-run`: nothing is deployed.
 
 ---
 
@@ -197,7 +148,6 @@ defaults:
 entities:
   - id: ch-prod.default.orders
     time_partitioning_column: created_at
-
     monitors:
       - id: orders_volume
         type: volume
@@ -221,108 +171,69 @@ entities:
         values: [pending, processing, shipped, delivered, cancelled]
 ```
 
-Give every monitor and test an `id:` of your own, as above. It is optional, but it
-is the check's address: with one, editing any other field updates the check and
-keeps its history, and without one a good many edits replace it instead. Section 6
-is the whole story.
+Give every monitor and test an `id:` of your own, as above. It is optional, but it is the address of the check. With an `id:`, an edit to any other field updates the check and keeps its history. Without one, many edits replace the check (§ 6).
 
-`version: v1beta2` is the current format; `v1beta1` is legacy and exists for
-compatibility only. Do not author new files in it.
+Use `version: v1beta2`. `v1beta1` is legacy and exists only for compatibility. Do not write new files in it.
 
-**Monitor types** watch an asset over time and learn what normal looks like:
-`volume`, `freshness`, `field_stats`, `custom_numeric`, `category_distribution`,
-`table_stats`, `custom_table_stats`. A `field_stats` column can carry its own
-metric selection, each metric with its own sensitivity.
+### Check types
 
-**SQL test types** assert something is true right now: `not_null`, `empty`,
-`unique`, `accepted_values`, `rejected_values`, `min_max`, `min_value`,
-`max_value`, `freshness`, `relative_time`, `business_rule`, `business_query`,
-`relationships`. The two that carry SQL you write yourself — `business_rule` and
-`business_query` — accept `{{ table }}`, replaced with the anchored table's fully
-qualified name. On a `sql_tests` deployment rule that is what makes one query
-cover every matched table instead of being copied onto each of them; any other
-`{{ name }}` token is rejected on save. See
-[SQL tests](README_SQL_TESTS.md).
+Monitor types watch an asset over time and learn what is normal: `volume`, `freshness`, `field_stats`, `custom_numeric`, `category_distribution`, `table_stats`, `custom_table_stats`. A `field_stats` column can have its own metric selection, and each metric its own sensitivity.
 
-**Deployment rules** (`deployment_rules`, and `deployment_exclusions` to carve
-assets back out) apply checks by *query* rather than by listing assets, so a new
-matching asset is covered without editing the file. `type` says what a rule
-deploys: `table_stats` deploys monitors, `sql_tests` deploys the SQL tests listed
-under its own `tests:`, onto every table or view the selection matches. On a
-`sql_tests` rule the schedule, timezone, severity and `save_failures` are
-rule-level and govern every test it deploys; a test may override only `severity`.
+SQL test types assert that something is true now: `not_null`, `empty`, `unique`, `accepted_values`, `rejected_values`, `min_max`, `min_value`, `max_value`, `freshness`, `relative_time`, `business_rule`, `business_query`, `relationships`.
 
-A `sql_tests` rule deploys each test only onto the matched tables that have every
-column it reads, and the deploy plan lists the rest as skipped tests. So a broad
-selection is safe to write: a rule carrying three tests covers each table with
-the ones that fit it, and the plan says where they landed.
+- `business_rule` and `business_query` carry your own SQL. They accept `{{ table }}`, which is replaced with the fully qualified name of the anchored table.
+- On a `sql_tests` deployment rule, `{{ table }}` lets one query cover every matched table. Any other `{{ name }}` token is rejected on save. See [SQL tests](README_SQL_TESTS.md).
 
-`export` writes `sql_tests` rules back into the `deployment_rules` list, so a
-workspace that has them can be adopted with the loop in section 1. A
-`table_stats` rule is written as the single-asset `table_stats` monitors it
-covers; its query form is authoring-only, so a file that has to keep one must
-keep the hand-written version.
+### Deployment rules
 
-Where to look for the fields of any one of them, in order of authority:
+Deployment rules (`deployment_rules`, and `deployment_exclusions` to remove assets again) apply checks by query, not by a list of assets. So a new matching asset is covered without a change to the file.
 
-1. [the published schema](https://schemas.synq.io/synq-monitors/v1/config.schema.json)
-   — every field, every accepted value.
-2. [`examples/`](examples/) — one file per monitor type, per test type and per
-   pattern, all of them deployable as written.
-3. [SQL tests](README_SQL_TESTS.md) for the test types in prose, and
-   [Monitors as code](https://docs.synq.io/monitors/monitors-as-code) for what the
-   YAML declares and why.
+- `type` tells what a rule deploys. `table_stats` deploys monitors. `sql_tests` deploys the SQL tests in its own `tests:` onto every table or view that the selection matches.
+- On a `sql_tests` rule, the schedule, timezone, severity and `save_failures` are set on the rule and apply to every test. A test can override only `severity`.
+- A `sql_tests` rule deploys each test only onto matched tables that have every column the test reads. The plan lists the others as skipped tests. So a broad selection is safe: each table gets the tests that fit it, and the plan shows where they went.
+- `export` writes `sql_tests` rules back into `deployment_rules`, so you can adopt a workspace that has them with the loop in § 1.
+- `export` writes a `table_stats` rule as the single-asset `table_stats` monitors that it covers. Its query form is only for authoring. If a file must keep the query form, keep your hand-written version.
 
-An unknown key on an entity, a monitor or a test is an error, not something
-ignored, so a misspelled field there fails the run rather than silently doing
-nothing. Deeper inside a single test's own options that check thins out, so a
-run that succeeds is not by itself proof that every key landed. Check the plan:
-a field that was accepted shows up in the diff for an existing check.
+### Where to find fields
+
+In order of authority:
+
+1. [The published schema](https://schemas.synq.io/synq-monitors/v1/config.schema.json): every field and every accepted value.
+2. [`examples/`](examples/): one file per monitor type, per test type and per pattern. You can deploy each file as written.
+3. [SQL tests](README_SQL_TESTS.md) for the test types in prose, and [Monitors as code](https://docs.synq.io/monitors/monitors-as-code) for what the YAML declares and why.
+
+An unknown key on an entity, a monitor or a test is an error, so a misspelled field there fails the run. Inside the options of a single test, this check is weaker, so a successful run does not prove that every key was applied. Check the plan: an accepted field shows in the diff of an existing check.
 
 ---
 
 ## 6. What re-deploying changes, and what it replaces
 
-`deploy` matches a check by its **id**, so what the id is derived from decides
-whether an edit is an update or a replacement — and a replacement is not an edit.
-The old check is deleted, with its issue history and its error runs, and for a
-monitor with the baseline it has learned; a new one is created in its place.
+`deploy` matches a check by its id. So the source of the id decides if an edit is an update or a replacement. A replacement is not an edit: the old check is deleted with its issue history and error runs (and, for a monitor, its learned baseline), and a new check is created.
 
-**Write an `id:` of your own and it becomes the check's address:**
+### The `id:` is the address
 
 | `id:` | What identifies the check |
 |---|---|
-| a name of your own — `orders_nulls` | the namespace, the entity, the check type, and that name. Nothing else |
-| a UUID | itself, verbatim — this is what `export` writes |
-| omitted | the check's *content*, which differs per type — see the tables below |
+| a name of your own, for example `orders_nulls` | the namespace, the entity, the check type and that name, nothing else |
+| a UUID | the UUID itself; this is what `export` writes |
+| omitted | the content of the check, which is different per type (tables below) |
 
-So under an `id:` of your own, everything except the entity and the type is an
-attribute you can edit in place: the `metric_aggregation` of a `custom_numeric`,
-the column of a `category_distribution`, a test's columns or its SQL, the mode,
-the segmentation, the partitioning column. Three things still replace the check, and each has a reason
-that will not go away:
+With an `id:` of your own, everything except the entity and the type is an attribute that you can edit in place. Examples: the `metric_aggregation` of a `custom_numeric`, the column of a `category_distribution`, the columns or SQL of a test, the mode, the segmentation, the partitioning column. Three edits still replace the check:
 
-- **renaming the `id`** — it is the address, so a new one is a new check;
-- **moving the check to another entity** — the API refuses to point an existing
-  monitor at a different asset;
-- **changing its `type`** — a `volume` monitor that becomes a `freshness` monitor
-  measures something else, so neither its baseline nor its history means anything
-  under the new one.
+- A new `id` is a new address, so it is a new check.
+- A move to another entity is a new check, because the API refuses to point a monitor at a different asset.
+- A new `type` is a new check. A `volume` monitor that becomes a `freshness` monitor measures something else, so its baseline and history have no meaning.
 
-`id:` is optional, and **without one the content is the identity** — which is what
-lets two checks of the same type sit on one entity without either of them naming
-an id. The cost is that editing a field in that content replaces the check. The
-per-type content is: for a `custom_numeric` its `metric_aggregation`, for a
-`category_distribution` its column, for a test its columns and, for a
-`business_rule` or `business_query`, the SQL; plus, for every monitor, the mode,
-the time-partitioning expression and the segmentation expression.
+Without an `id:`, the content is the identity. This lets two checks of the same type sit on one entity with no ids, but an edit to the content replaces the check. The content is:
 
-Two `field_stats` monitors on one entity are the exception: the content
-derivation does not include their `columns`, so a pair that differs only there
-gets the same id and the deploy fails on the duplicate. Give at least one of them
-an `id:`.
+- for a `custom_numeric`, its `metric_aggregation`;
+- for a `category_distribution`, its column;
+- for a test, its columns, and for `business_rule` or `business_query` also the SQL;
+- for every monitor, also the mode, the time-partitioning expression and the segmentation expression.
 
-So, for monitors:
+Two `field_stats` monitors on one entity are an exception. Their content does not include `columns`, so two that differ only there get the same id, and the deploy fails on the duplicate. Give at least one of them an `id:`.
+
+### Monitor edits
 
 | Edit | With an `id:` | Without one |
 |---|---|---|
@@ -335,185 +246,131 @@ So, for monitors:
 | the metrics of a `field_stats` column | update in place | update in place |
 | move the monitor to a different entity | replace | replace |
 | change the monitor `type` | replace | replace |
-| rename the `id` | replace | — |
+| rename the `id` | replace | n/a |
 
-And for tests:
+### Test edits
 
 | Edit | With an `id:` | Without one |
 |---|---|---|
 | `severity`, recurrence, evaluators, `name`, `description`, `save_failures`, `category` | update in place | update in place |
 | the `values` of an `accepted_values`, the bounds of a `min_max` | update in place | update in place |
-| the `column`/`columns` a test names | update in place | replace |
+| the `column`/`columns` of a test | update in place | replace |
 | the SQL of a `business_rule` or `business_query` | update in place | replace |
 | move the test to a different entity | replace | replace |
 | change the test `type` | replace | replace |
-| rename the `id` | replace | — |
+| rename the `id` | replace | n/a |
 
-A deployment rule works the same way, and it matters more there than anywhere
-else. **Deleting a `sql_tests` rule deletes every test the rule deployed**,
-together with those tests' check entities and their history. Nothing brings
-them back — not the tests, not their history.
+### Deployment rule edits
 
-Renaming a rule that carries no `id:` replaces it: the old rule is deleted
-with everything it deployed, and the next scheduled sync builds the tests
-again from scratch under the new name. A monitor rule is gentler — its
-monitors survive as long as some rule still covers the asset — but the
-rule's own id changes, so every link and every `id=` someone held goes
-stale.
+Rule identity works the same way, and the risk is higher. If you delete a `sql_tests` rule, you delete every test that the rule deployed, with their check entities and history. Nothing can restore them.
+
+- If a rule has no `id:`, a rename replaces it. The old rule is deleted with everything it deployed, and the next scheduled sync builds the tests again from the start under the new name.
+- A monitor rule is safer: its monitors stay while some rule still covers the asset. But the id of the rule changes, so every link and every `id=` that someone kept stops working.
 
 | `id:` on a rule | What identifies the rule |
 |---|---|
-| a name of your own | the namespace and that name, so the rule's `name:` becomes editable |
-| a UUID | itself, verbatim — `export` writes one |
-| omitted | the namespace and the rule's `name:`, so a rename replaces it |
+| a name of your own | the namespace and that name, so you can edit the `name:` of the rule |
+| a UUID | the UUID itself; `export` writes one |
+| omitted | the namespace and the `name:` of the rule, so a rename replaces it |
 
-That holds for both kinds of rule and for a `deployment_exclusions` entry.
-Everything else — the `resolver_ql` it selects with, and whatever the kind carries
-to describe the checks it deploys — is an attribute. The two kinds carry different
-attributes, so the table names which fields belong to which; a field from the
-other kind is rejected, not ignored.
+This applies to both kinds of rule and to a `deployment_exclusions` entry. Everything else is an attribute: the `resolver_ql` selection and the fields that describe the deployed checks. The two kinds have different attributes. A field of the other kind is rejected, not ignored.
 
 | Edit | With an `id:` | Without one |
 |---|---|---|
-| `resolver_ql` — broaden, narrow, or just reformat | update in place | update in place |
-| `severity` — either kind | update in place | update in place |
-| `metrics`, `sensitivity`, `delay_model` — `table_stats` only | update in place | update in place |
-| the `tests:` a rule deploys, plus `schedule`, `timezone`, `save_failures`, `keep_removed_tests` — `sql_tests` only | update in place | update in place |
+| `resolver_ql`: broaden, narrow, or only reformat | update in place | update in place |
+| `severity`, either kind | update in place | update in place |
+| `metrics`, `sensitivity`, `delay_model`, `table_stats` only | update in place | update in place |
+| the `tests:` of a rule, and `schedule`, `timezone`, `save_failures`, `keep_removed_tests`, `sql_tests` only | update in place | update in place |
 | `name` | update in place | replace |
 
-Updating a rule in place resyncs it: checks appear on assets the selection now
-matches, go away from assets it no longer matches, and assets that match both
-before and after keep the checks they already had, with their history.
+An update in place syncs the rule again. Checks appear on assets that the selection now matches and go away from assets that it no longer matches. Assets that match before and after keep their checks and history.
 
-One rule kind narrows the field: an entity-anchored `table_stats` monitor becomes
-a rule on that one asset, and there is one such rule per asset — so it is
-addressed by the asset, and its `id:` accepts only the UUID `export` writes for
-it, adopting that rule. A name of your own there is rejected rather than
-reinterpreted. Converting such a monitor into a query rule under
-`deployment_rules` is a different rule selecting differently, not an edit: expect
-a create and a delete.
+- An entity-anchored `table_stats` monitor becomes a rule on that one asset, and each asset has one such rule. So the asset is its address, and its `id:` accepts only the UUID that `export` writes for it, which adopts that rule. A name of your own there is rejected.
+- If you change such a monitor into a query rule under `deployment_rules`, it is a different rule with a different selection, not an edit. Expect a create and a delete.
+- A rule and an exclusion can share a name or an `id:`. They are different things, and each keeps its own identity.
 
-A rule and an exclusion may share a name, or an `id:`: they are two different
-things and each keeps its own identity.
+### Reading a replacement in the plan
 
-**`--dry-run` names a monitor replacement**, on one line — `Replaced, id changed:
-<old> → <new>`, with what it discards and the fields that differ — and counts it as
-neither a create nor a delete. Anything on one asset and of one type that leaves as
-one monitor and arrives as one monitor is paired that way: a renamed `id:`, an edit
-to a monitor carrying no `id:`, or two unrelated monitors that happen to share the
-asset and the type. **Read the diff, not the word "Replaced"** — it is what says
-which of the three you are looking at, and the line above prints the new monitor's
-name, so a `name:` in the diff means the one going away had a different one. An
-entity move and a `type:` change stay a delete plus a create in the two sections of
-the plan, because both really are a different check. A replaced **test** or **rule**
-is a delete plus a create too, so read those two sections when you have edited an
-`id:` or a rule's `name:`.
+`--dry-run` shows a monitor replacement on one line: `Replaced, id changed: <old> → <new>`, with what it discards and the fields that differ. It counts as neither a create nor a delete.
 
-"Update in place" above means the check keeps its id and its history. A few of
-those updates keep the check but still discard what it has learned, which is the
-next section.
+- The plan pairs any one monitor that leaves and one that arrives on the same asset with the same type. This can be a renamed `id:`, an edit to a monitor without an `id:`, or two unrelated monitors that share the asset and the type.
+- Read the diff, not the word "Replaced". The diff tells which of the three it is. The line above prints the name of the new monitor, so a `name:` in the diff means that the old monitor had a different name.
+- An entity move and a `type:` change stay a delete plus a create, in the two sections of the plan.
+- A replaced test or rule is also a delete plus a create. If you edited an `id:` or the `name:` of a rule, read those two sections.
+
+"Update in place" means that the check keeps its id and its history. Some updates in place still discard what the check learned (§ 7).
 
 ---
 
 ## 7. Resets and re-runs: updates that are not free
 
-Some in-place updates keep the check but disturb what it has. The plan flags
-these. What they cost is not the same for a monitor and for a test, and the two
-used to share one word.
+Some updates in place keep the check but change what it has. The plan shows these. The cost is different for a monitor and for a test.
 
-**A monitor reset discards the learned baseline.** It has no anomaly baseline
-until it has collected enough history again, and during that window it is not
-really watching anything. A monitor resets when its timezone changes, its mode
-changes (`anomaly_engine` ⇄ `fixed_thresholds`), its schedule changes (type, or
-the time of day / minute of hour, or the delay), its `metric_aggregation` or a
-`category_distribution`'s column or `top_k_limit` changes, its time-partitioning
-expression or interval changes, or its segmentation changes.
+### Monitor reset
 
-The mode, the `metric_aggregation`, a `category_distribution`'s column, the
-partitioning expression and the segmentation reach a reset only when the monitor
-carries an `id:`. Without one they are part of its identity, so the same edit
-replaces the monitor outright, which is strictly worse.
+A monitor reset discards the learned baseline. The monitor has no anomaly baseline until it collects enough history again, and during that time it does not really watch anything. A monitor resets when one of these changes:
 
-**A test re-run discards nothing.** A test has no learned state, so what the plan
-calls out is that the test will run again: it is re-armed and runs immediately
-rather than at its next scheduled slot. A test is re-armed when its recurrence,
-its severity, its evaluators, or its template body change — the last one meaning
-any test-specific field, including the columns it names, the `values` of an
-`accepted_values` or the bounds of a `min_max`. A test with no `schedule:`, run by
-something outside `synqcli`, is not re-armed at all; it runs at its next external
-trigger.
+- its timezone;
+- its mode (`anomaly_engine` ⇄ `fixed_thresholds`);
+- its schedule (type, time of day, minute of hour, or delay);
+- its `metric_aggregation`, or the column or `top_k_limit` of a `category_distribution`;
+- its time-partitioning expression or interval;
+- its segmentation.
 
-What a test *does* lose is a replacement, from § 6: a new id means a new check
-entity, so its issues and its error runs are gone. That is the thing an `id:`
-buys, not the re-run.
+The mode, the `metric_aggregation`, the `category_distribution` column, the partitioning expression and the segmentation cause a reset only when the monitor has an `id:`. Without one, they are part of its identity, so the same edit replaces the monitor, which is worse.
 
-There is no flag to suppress a reset and no way to deploy the change without it.
-The choice is to accept it or to leave the field alone, so the useful thing an
-agent can do is notice it in the plan and say so before confirming, rather than
-discover it afterwards.
+### Test re-run
+
+A test re-run discards nothing. A test has no learned state. The plan only tells you that the test runs again: it is re-armed and runs at once, not at its next scheduled time.
+
+- A test is re-armed when its recurrence, its severity, its evaluators or its template body change. The template body is any test-specific field, for example the columns, the `values` of an `accepted_values`, or the bounds of a `min_max`.
+- A test with no `schedule:` runs from a trigger outside `synqcli`. It is not re-armed, and runs at its next external trigger.
+- A test loses data only on a replacement (§ 6). A new id means a new check entity, so its issues and error runs are gone. An `id:` prevents this, not the re-run.
+
+No flag suppresses a reset, and you cannot deploy the change without it. You can accept it or leave the field unchanged. So notice it in the plan and tell the person before you confirm.
 
 ---
 
 ## 8. Refusals, and what each one means
 
-### "managed by other configs" — the deploy is refused
+### "managed by other configs": the deploy is refused
 
 ```
 🚫 2 monitors managed by other configs.
    - Monitor ID: 7f3b…, Managed by namespace: team-platform
 ```
 
-This is the ownership gate, and it is the only condition that refuses a deploy
-outright. It means your file declares a check that already exists and belongs to a
-different namespace. Two configs claiming one check would make every deploy fight
-the other, so the tool stops instead of picking a winner.
+This is the ownership gate, the only condition that refuses a deploy. Your file declares a check that exists and belongs to a different namespace. If two configs claimed one check, each deploy would undo the other, so the tool stops.
 
-**It aborts the entire run, not just that namespace**, and it aborts `--dry-run`
-too — so no plan is printed for any namespace until it is resolved.
+It stops the entire run, not only that namespace, and also `--dry-run`. No plan is printed for any namespace until you resolve it.
 
-The recovery, in the order to try it:
+Try these steps in order:
 
-1. **Confirm it is not just the wrong namespace on your side.** The message names
-   the namespace that owns the check. If that is the namespace your file should
-   have declared, fix `namespace` and the conflict disappears.
-2. **Stop declaring it.** If it genuinely belongs to the other config, remove it
-   from yours. This is the right answer far more often than transferring it.
-3. **Transfer it deliberately**, if it really should move: remove it from the
-   owning config and deploy that config first, then add it to yours and deploy
-   again. Between the two deploys the check does not exist — it is deleted and
-   recreated, so it loses its history. There is no in-place handover.
+1. Check if the namespace on your side is wrong. The message names the namespace that owns the check. If your file should declare that namespace, fix `namespace`, and the conflict goes away.
+2. Stop declaring the check. If it belongs to the other config, remove it from yours. This is usually the correct answer.
+3. Transfer it, if it must move. Remove it from the owning config and deploy that config first. Then add it to yours and deploy again. Between the two deploys the check does not exist: it is deleted and created again, so it loses its history. There is no handover in place.
 
-Deciding which config should own a check is a judgement about how a team works, so
-it is one to put to whoever owns the config, not one to resolve by editing the
-other team's file.
+Which config owns a check is a decision about how a team works. Ask the owner of the config. Do not edit the file of the other team.
 
-### "Managed by API (No Config)" and monitors created in the app — not refused
+### "Managed by API (No Config)" and monitors created in the app: not refused
 
-Both appear in the plan under their own headings, and neither blocks anything.
-**They are adoptions:** a check created in the web app, or created over the API
-without a namespace, is taken over by your namespace when your config declares it.
-From then on it is yours, and a later deploy that stops declaring it will delete
-it.
+Both show in the plan under their own headings, and neither blocks anything. They are adoptions. If your config declares a check that was created in the web app, or over the API without a namespace, your namespace takes it. After that it is yours, and a later deploy that stops declaring it deletes it.
 
-That is usually what was wanted, but it is silent and it is one-way. If a check was
-deliberately maintained in the UI, declaring it in a config takes it away from
-whoever maintains it there.
+This is usually what you want, but it is silent and one-way. If someone maintains a check in the UI on purpose, a config that declares it takes it from them.
 
 ### Everything else that stops a run
 
 | Refusal | What it means |
 |---|---|
-| An entity id could not be resolved | § 2 — the asset is unknown, or you are on the wrong workspace |
-| An entity id resolved to multiple entities | § 2 — use one of the full paths it lists |
-| An entity id has no warehouse table or view to monitor | § 2 — it names an asset that is not a table; use the table or view itself |
-| Duplicate checks | Two entries in the file reduce to the same identity. Give them different columns, expressions or ids |
+| An entity id could not be resolved | § 2: the asset is unknown, or you are on the wrong workspace |
+| An entity id resolved to multiple entities | § 2: use one of the full paths it lists |
+| An entity id has no warehouse table or view to monitor | § 2: it names an asset that is not a table; use the table or view itself |
+| Duplicate checks | Two entries in the file have the same identity. Give them different columns, expressions or ids |
 | A validation error | The message names the field. Check it against the schema |
-| A field is rejected as unknown | Unknown keys are errors, not warnings. Usually a misspelling or a v1beta1 field in a v1beta2 file |
-| A parse error in a file you did not mean to deploy | `deploy` with no arguments walks the working directory for every `.yaml` and `.yml`. Pass files explicitly |
+| A field is rejected as unknown | Unknown keys are errors, not warnings. Usually a misspelling, or a v1beta1 field in a v1beta2 file |
+| A parse error in a file you did not mean to deploy | `deploy` with no arguments reads every `.yaml` and `.yml` in the working directory. Pass files explicitly |
 
-All of these are collected across every file and namespace and reported together,
-then the run exits without deploying anything. That is deliberate: fix them in one
-pass rather than one at a time.
+These errors are collected over every file and namespace and reported together. Then the run exits and deploys nothing. Fix them all in one pass.
 
 ---
 
@@ -524,40 +381,27 @@ synqcli deploy config.yaml --dry-run
 synqcli deploy config.yaml --auto-confirm
 ```
 
-- **Credentials**, in precedence order: `--client-id` / `--client-secret` flags;
-  `QUALITY_CLIENT_ID` / `QUALITY_CLIENT_SECRET` (or a pre-issued `QUALITY_TOKEN`);
-  a `.env` file in the working directory; a cached browser login. Client
-  credentials beat a cached login, so CI is unaffected by whoever logged in last.
-  `synqcli auth login --coalesce [--organization <org-id>]` caches a login with
-  your Coalesce account instead, carrying your Coalesce Quality roles in the
-  organization's workspace rather than consented permissions.
-- **The deployment** is named, not spelled out: `--region eu|us|au`, or
-  `--endpoint` for a self-hosted one. `synqcli auth login` remembers the choice and
-  `synqcli auth use <region>` switches it, so later commands need no flag. **A
-  wrong region is the most expensive mistake available here** — it reconciles a
-  workspace that does not have your checks declared, and reconciling means
-  deleting.
-- **Confirm the target before writing.** Every `deploy` and `export` prints the
-  workspace it connected to, before it does anything. Read that line.
-- **An execution log** in JSONL is written when `--log-file` or `$QUALITY_LOG_FILE`
-  is set: one record per phase, per namespace result and per error. This is the
-  machine-readable version of the run, and it is much better to parse than the
-  formatted output.
-- **Exit codes:** `0` means the command did what it said, `1` means it did not — a
-  failed deploy or export, and also a mistyped flag, an unknown command, a missing
-  argument or an unusable `--region` / `--endpoint`. So a CI step that checks the
-  status also catches an invocation an older `synqcli` does not understand, rather
-  than passing having deployed nothing.
-- **A cancelled namespace is not a failure.** Declining the prompt exits `0`.
-  `--dry-run` also exits `0` whether or not there were changes. If a CI gate needs
-  "nothing to deploy", read the log file rather than the status.
+Credentials, in order of precedence:
+
+1. The `--client-id` / `--client-secret` flags.
+2. `QUALITY_CLIENT_ID` / `QUALITY_CLIENT_SECRET`, or a pre-issued `QUALITY_TOKEN`.
+3. A `.env` file in the working directory.
+4. A cached browser login.
+
+Client credentials come before a cached login, so the last person who logged in does not change CI. `synqcli auth login --coalesce [--organization <org-id>]` caches a login with your Coalesce account. That credential carries your Coalesce Quality roles in the workspace of the organization, not consented permissions.
+
+- Select the deployment by name: `--region eu|us|au`, or `--endpoint` for a self-hosted one. `synqcli auth login` remembers the choice, and `synqcli auth use <region>` changes it, so later commands need no flag.
+- A wrong region is the most expensive mistake here. It reconciles a workspace that does not declare your checks, and to reconcile means to delete.
+- Confirm the target before you write. Every `deploy` and `export` prints the workspace that it connected to before it does anything. Read that line.
+- Set `--log-file` or `$QUALITY_LOG_FILE` to get a JSONL execution log: one record per phase, per namespace result and per error. Parse this log, not the formatted output.
+- Exit code `0` means the command did what it said. `1` means it did not: a failed deploy or export, and also a mistyped flag, an unknown command, a missing argument, or an unusable `--region` / `--endpoint`. So a CI step that checks the status also catches an invocation that an older `synqcli` does not understand.
+- A cancelled namespace is not a failure: a declined prompt exits `0`. `--dry-run` also exits `0`, with or without changes. If a CI gate needs "nothing to deploy", read the log file, not the status.
 
 ---
 
-## 10. `advisor` — propose tests for an asset
+## 10. `advisor`: propose tests for an asset
 
-`advisor` asks a model to suggest tests for an entity and can write them straight
-into a config:
+`advisor` asks a model to suggest tests for an entity, and can write them into a config:
 
 ```bash
 synqcli advisor \
@@ -566,18 +410,14 @@ synqcli advisor \
   --output ./suggested
 ```
 
-`--output` is a **directory**; one file is written per entity, and an existing file
-is skipped unless `--force` is passed. `--entity-id` is repeatable. Other flags
-worth knowing: `--columns` to narrow the scope, `--instructions-file` for a long
-prompt, `--severity` for the default it assigns, `--namespace` for the group it
-writes into, and `--connections` to let it profile the warehouse — which is what
-lets it propose real `accepted_values` and real bounds instead of guesses.
+- `--output` is a directory. It gets one file per entity. An existing file is skipped unless you pass `--force`.
+- `--entity-id` can be repeated.
+- `--columns` narrows the scope. `--instructions-file` reads a long prompt from a file. `--severity` sets the default severity, and `--namespace` the group it writes into.
+- `--connections` lets it profile the warehouse. With it, it proposes real `accepted_values` and real bounds, not guesses.
 
-**Review what it writes before deploying it.** `--output`, then read, then `deploy
---dry-run` is the safe order. It proposes; it does not know what the workspace
-already has.
+Review what it writes before you deploy it. The safe order is `--output`, then read, then `deploy --dry-run`. It only proposes, and it does not know what the workspace already has.
 
-Being specific in the instructions pays. Some that work:
+Specific instructions give better results. Some that work:
 
 ```
 This is an orders table. Suggest tests for:
@@ -609,48 +449,28 @@ This is time series data. Suggest tests for:
 
 ## 11. What each command costs
 
-- `schema` — free and offline. No credentials, no API call.
-- `auth status` — reads local files only. No network.
-- `export` — reads the workspace. Cheap. Note that it **refuses to overwrite an
-  existing output file**, so give it a fresh path.
-- `deploy --dry-run` — resolves every entity id and diffs against the workspace.
-  Cheap, and always worth it.
-- `deploy` — writes. The cost is the blast radius, not the runtime: it creates,
-  updates and **deletes** in one pass.
-- `advisor` — a model call per entity, plus warehouse metadata reads and, with
-  `--connections`, profiling queries against the warehouse itself. The only command
-  here with a per-run cost worth thinking about; scope it with `--entity-id` and
-  `--columns` rather than pointing it at everything.
-- `upgrade` — replaces this binary with the latest release, verified against the
-  release's `checksums.txt`; `upgrade --check` reports what it would do and changes
-  nothing. Neither touches the workspace. `synqcli` also mentions a newer release
-  on stderr about once a day, and stays silent when an agent is driving it, when
-  output is not a terminal, in CI, and in a container — so it never lands in output
-  you are parsing. `QUALITY_NO_UPDATE_CHECK=1` turns it off outright.
+- `schema`: free and offline. No credentials, no API call.
+- `auth status`: reads local files only. No network.
+- `export`: reads the workspace, and is cheap. It refuses to overwrite an existing output file, so give it a new path.
+- `deploy --dry-run`: resolves every entity id and compares with the workspace. Cheap, and always worth it.
+- `deploy`: writes. The cost is the blast radius, not the runtime: it creates, updates and deletes in one pass.
+- `advisor`: one model call per entity, plus warehouse metadata reads, and with `--connections` profiling queries on the warehouse. It is the only command with a cost per run that matters. Limit it with `--entity-id` and `--columns`.
+- `upgrade`: replaces this binary with the latest release, verified against the `checksums.txt` of the release. `upgrade --check` reports what it would do and changes nothing. Neither touches the workspace.
+
+About once a day, `synqcli` mentions a newer release on stderr. It is silent when an agent drives it, when output is not a terminal, in CI and in a container, so the notice never gets into output that you parse. `QUALITY_NO_UPDATE_CHECK=1` turns it off.
 
 ---
 
 ## 12. Never do these
 
-- **Never run `deploy` without reading a `--dry-run` first** on a workspace whose
-  config you did not author. Deploy is a reconcile, so an incomplete file is a
-  delete.
-- **Never guess a `namespace`.** A typo does not scope the run down, it asks for a
-  deletion.
-- **Never export the whole workspace under a namespace and deploy it back.**
-  `export --namespace` labels, it does not filter — see § 3.
-- **Never invent a UUID for an `id:`.** A name of your own is the supported way to
-  address a check (§ 6); a UUID you made up addresses nothing and, on an
-  entity-anchored `table_stats` monitor, adopts a rule that does not exist. Copy a
-  UUID only from `export` or from the app.
-- **Never assume a rename is a rename.** Check it against § 6 first, and read the
-  replacement line and the delete list in the plan.
-- **Never self-confirm a monitor reset.** If the plan says a monitor resets, say so
-  and let the person decide — the baseline it discards is not recoverable. A test
-  that "will run again" discards nothing and needs no such pause.
-- **Never point a config at a workspace you have not confirmed.** `auth status`,
-  and read the workspace line the command prints.
-- **Never edit the schema or the CLI reference by hand.** Both are generated.
+- Never run `deploy` on a workspace whose config you did not write without first reading a `--dry-run`. Deploy is a reconcile, so an incomplete file is a delete.
+- Never guess a `namespace`. A typo does not narrow the run, it asks for a delete.
+- Never export the whole workspace under a namespace and deploy it back. `export --namespace` labels, it does not filter (§ 3).
+- Never invent a UUID for an `id:`. A name of your own is the supported address (§ 6). A UUID that you made up addresses nothing, and on an entity-anchored `table_stats` monitor it adopts a rule that does not exist. Copy a UUID only from `export` or from the app.
+- Never assume that a rename is a rename. Check it against § 6, and read the replacement line and the delete list in the plan.
+- Never confirm a monitor reset yourself. If the plan says that a monitor resets, say so and let the person decide, because the discarded baseline cannot be recovered. A test that "will run again" discards nothing and needs no pause.
+- Never point a config at a workspace that you did not confirm. Run `auth status`, and read the workspace line that the command prints.
+- Never edit the schema or the CLI reference by hand. Both are generated.
 
 ---
 
@@ -658,19 +478,14 @@ This is time series data. Suggest tests for:
 
 | Symptom | Cause |
 |---|---|
-| The plan deletes checks you did not expect | Wrong `namespace`, or a file missing what the namespace already owns — export first |
-| The command hangs and prints nothing further | It is waiting on the confirmation prompt. Use `--dry-run`, or `--auto-confirm` |
-| A check was recreated instead of updated | Its address changed — a renamed `id:`, another entity, another `type` — or it carries no `id:` and a field of its content changed. § 6 |
-| A monitor updated but lost its baseline | A reset — § 7 |
-| "managed by other configs" refuses everything | The ownership gate — § 8 |
-| An entity id does not resolve | § 2, and check the workspace before the spelling |
-| A check created in the app is now in your plan | Adoption, which is expected and one-way — § 8 |
-| `deploy` complains about YAML you never wrote | With no file arguments it walks the working directory. Pass files explicitly |
+| The plan deletes checks you did not expect | A wrong `namespace`, or a file that is missing what the namespace already owns. Export first |
+| The command hangs and prints nothing more | It waits on the confirmation prompt. Use `--dry-run`, or `--auto-confirm` |
+| A check was created again instead of updated | Its address changed (a renamed `id:`, another entity, another `type`), or it has no `id:` and a field of its content changed. § 6 |
+| A monitor updated but lost its baseline | A reset, § 7 |
+| "managed by other configs" refuses everything | The ownership gate, § 8 |
+| An entity id does not resolve | § 2. Check the workspace before the spelling |
+| A check created in the app is now in your plan | Adoption, which is expected and one-way, § 8 |
+| `deploy` complains about YAML you never wrote | With no file arguments, it reads the working directory. Pass files explicitly |
 | Nothing deploys and the status is still `0` | The prompt was declined, or `--dry-run` was set |
 
-The full command and flag reference is generated from the CLI itself and published
-as the [CLI reference](https://docs.synq.io/monitors/cli). For what the YAML
-declares and why, start at
-[Monitors as code](https://docs.synq.io/monitors/monitors-as-code); for the test
-types in detail, [SQL tests](https://docs.synq.io/monitors/sql-tests) and
-[Deployment rules](https://docs.synq.io/monitors/deployment-rules).
+The full command and flag reference is generated from the CLI and published as the [CLI reference](https://docs.synq.io/monitors/cli). For what the YAML declares and why, start at [Monitors as code](https://docs.synq.io/monitors/monitors-as-code). For the test types in detail, see [SQL tests](https://docs.synq.io/monitors/sql-tests) and [Deployment rules](https://docs.synq.io/monitors/deployment-rules).
