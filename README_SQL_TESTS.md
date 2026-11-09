@@ -383,6 +383,21 @@ default.
       AND customer_id IS NULL
 ```
 
+### Run a test again with the same time values
+
+After you fix the data, or to look at a failure, run the failed execution again.
+The run uses the current SQL of the test and the placeholder values of that
+execution, so it checks the same rows. Later scheduled runs do not take their
+values from it.
+
+- API: `POST /api/datachecks/scheduler/v1/trigger/sql-test-run-again` with the
+  `execution_id` of the earlier execution. It is
+  `TriggerService.TriggerSqlTestRunAgain` in
+  [`synq/datachecks/v1/trigger_service.proto`](https://buf.build/getsynq/api).
+  It accepts the `execution_id` of a trigger result, or the `id` of the execution
+  in the executions API.
+- MCP: the `run_sql_test_again` tool.
+
 ### A warning for time functions
 
 When a test uses a time function, the deploy succeeds and prints a warning that
