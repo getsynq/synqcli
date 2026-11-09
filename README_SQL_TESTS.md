@@ -390,6 +390,8 @@ The run uses the current SQL of the test and the placeholder values of that
 execution, so it checks the same rows. Later scheduled runs do not take their
 values from it.
 
+- App: open the run of the SQL test and click **Run again**. The run shows the
+  values of the placeholders under **Time window**.
 - API: `POST /api/datachecks/scheduler/v1/trigger/sql-test-run-again` with the
   `execution_id` of the earlier execution. It is
   `TriggerService.TriggerSqlTestRunAgain` in
