@@ -410,6 +410,11 @@ suggestion can give different days, so check the suggestion before you use it.
 To check only new rows instead, change the filter to `{{ last_executed_at }}` as
 shown above. That checks different rows, so decide on it yourself.
 
+In the app, the query editor shows the warning with the suggested SQL as a diff.
+When Scout is set up, it can also suggest a rewrite to `{{ last_executed_at }}`
+with the reason. Check that suggestion before you use it, as it changes which
+rows the test checks.
+
 ## Configuration Reference
 
 For complete field specifications and validation rules, refer to the [published schema](https://schemas.synq.io/synq-monitors/v1/config.schema.json). You can also reference it from your YAML files for IDE support:
