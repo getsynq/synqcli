@@ -182,7 +182,8 @@ Monitor types watch an asset over time and learn what is normal: `volume`, `fres
 SQL test types assert that something is true now: `not_null`, `empty`, `unique`, `accepted_values`, `rejected_values`, `min_max`, `min_value`, `max_value`, `freshness`, `relative_time`, `business_rule`, `business_query`, `relationships`.
 
 - `business_rule` and `business_query` carry your own SQL. They accept `{{ table }}`, which is replaced with the fully qualified name of the anchored table.
-- On a `sql_tests` deployment rule, `{{ table }}` lets one query cover every matched table. Any other `{{ name }}` token is rejected on save. See [SQL tests](README_SQL_TESTS.md).
+- On a `sql_tests` deployment rule, `{{ table }}` lets one query cover every matched table.
+- The time placeholders `{{ executed_at }}`, `{{ last_executed_at }}` and `{{ last_passed_at }}` work in the SQL of every SQL test. Use them instead of `NOW()` or `CURRENT_DATE`, so a test checks the same rows when it runs again. Write a placeholder without quotes, and convert it for a `DATE` column (`CAST({{ last_executed_at }} AS DATE)`, or `DATE(...)` on BigQuery). Any other `{{ name }}` token is rejected on save. See [SQL tests](README_SQL_TESTS.md), "Compare a placeholder with a column".
 
 ### Deployment rules
 

@@ -240,7 +240,8 @@ The `sql_query` of the `business_query` template is the SELECT that produces res
 `business_rule` and `business_query` carry SQL you write yourself, so nothing in
 them names the table unless you do. Write `{{ table }}` and it is replaced with
 the fully qualified name of the table the test is anchored to, quoted for your
-warehouse. It is the only supported placeholder — any other `{{ name }}` token is
+warehouse. The other supported placeholders are the time placeholders (see
+"Time placeholders: check only new rows"). Any other `{{ name }}` token is
 rejected when the test is saved.
 
 The substitution is textual, so the token is replaced everywhere it appears —
@@ -301,6 +302,96 @@ Two things to know before you add one to a test that already exists:
   `id:` to edit it in place instead. A test a deployment rule deploys is identified
   by its `name:`, so there the edit is in place either way — but renaming it mints
   a new test.
+
+## Time placeholders: check only new rows
+
+A test that uses `NOW()`, `CURRENT_DATE` or a similar function checks different
+rows each time it runs. If you fix the data and run the test again, or look at a
+failure later, it no longer checks the rows that failed. Use the time placeholders
+instead. Each one is replaced with a UTC timestamp when the test runs:
+
+| Placeholder | Value |
+| -- | -- |
+| `{{ executed_at }}` | The time of this run. For a scheduled run it is the scheduled time, also when the run starts late. |
+| `{{ last_executed_at }}` | The `{{ executed_at }}` of the previous run that had a result: it passed, or it failed on data. A run that failed before its query ran, for example on a connection error, is skipped, so the next run checks its rows. |
+| `{{ last_passed_at }}` | The `{{ executed_at }}` of the previous run that passed. |
+
+To check only the rows that are new since the previous run, filter on both ends.
+The window of each run starts where the window of the previous run ended, so no
+row is checked twice and no row is skipped:
+
+```yaml
+- type: business_query
+  id: new-orders-have-a-customer
+  name: New orders have a customer
+  sql_query: |
+    SELECT * FROM {{ table }}
+    WHERE loaded_at > {{ last_executed_at }} AND loaded_at <= {{ executed_at }}
+      AND customer_id IS NULL
+```
+
+Use `{{ last_passed_at }}` when every row since the last good state must be
+checked again. While the test fails, its window grows on each run. After you fix
+the data, the next run checks the whole period that failed, passes, and the window
+becomes small again.
+
+Filter on the time a row was loaded when the table has such a column. A row that
+arrives late, with an event time inside a window that was already checked, is not
+checked by a filter on the event time.
+
+### Compare a placeholder with a column
+
+A placeholder has the type that `NOW()` returns on your warehouse, so you can use it
+wherever `NOW()` works: `loaded_at > {{ last_executed_at }}`. Write it without
+quotes. `'{{ executed_at }}'` is rejected, because the value is already a timestamp.
+
+Convert it only when the column is not a timestamp:
+
+| Column type | Write |
+| -- | -- |
+| Timestamp, on any warehouse | `loaded_at > {{ last_executed_at }}` |
+| `DATE` or `DATETIME` on BigQuery | `load_date >= DATE({{ last_executed_at }})` or `load_dt > DATETIME({{ last_executed_at }})`. BigQuery does not compare a `TIMESTAMP` with these types. |
+| `DATE` on other warehouses | `load_date >= CAST({{ last_executed_at }} AS DATE)` |
+
+A comparison with a `DATE` column is per day. Use `>=` on the start of the window,
+so the rows of the day of the previous run are checked again and none are missed.
+
+### `lookback`
+
+`lookback` sets how far back the placeholders may reach, for example `6h` or `1d`:
+
+- When a placeholder has no earlier run to take its value from (the first run, or
+  a test that has not passed yet), its value is `{{ executed_at }}` minus the
+  lookback.
+- No placeholder is older than `{{ executed_at }}` minus the lookback. After a long
+  outage or a long series of failures, the run message says that the run did not
+  check the full window.
+
+When you leave `lookback` out, the first run looks back one interval of the
+test's `schedule` (1 day for a test without one), and the limit is seven intervals,
+at least 7 days. A test deployed by a `sql_tests` deployment rule always uses this
+default.
+
+```yaml
+- type: business_query
+  id: new-orders-have-a-customer
+  name: New orders have a customer
+  lookback: 2d
+  sql_query: |
+    SELECT * FROM {{ table }}
+    WHERE loaded_at > {{ last_passed_at }} AND loaded_at <= {{ executed_at }}
+      AND customer_id IS NULL
+```
+
+### A warning for time functions
+
+When a test uses a time function, the deploy succeeds and prints a warning that
+names the function, with a suggested SQL. The suggestion replaces each function
+with `{{ executed_at }}`, cast to a date for `CURRENT_DATE`. `{{ executed_at }}` is
+in UTC. If your warehouse session uses another time zone, `CURRENT_DATE` and the
+suggestion can give different days, so check the suggestion before you use it.
+To check only new rows instead, change the filter to `{{ last_executed_at }}` as
+shown above. That checks different rows, so decide on it yourself.
 
 ## Configuration Reference
 
