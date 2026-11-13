@@ -339,6 +339,25 @@ synqcli deploy -p  # prints protobuf messages in JSON format
 
 `synqcli deploy --help`, or the [CLI reference](https://docs.synq.io/monitors/cli#synqcli-deploy).
 
+#### Execution log
+
+`--log-file <path>` (or `$QUALITY_LOG_FILE`) writes one JSON object per line. The `namespace_result` record has one group per resource kind: `monitors`, `sql_tests`, `deployment_rules` and `sql_test_deployment_rules`. Each group has `created`, `updated` and `deleted` lists of objects, and `unchanged`, a count. An empty list is `[]`.
+
+```json
+{"ts":"2026-01-15T10:00:00Z","level":"info","event":"namespace_result","data":{"namespace":"data-team","monitors":{"created":[{"path":"ch-prod.default.orders","type":"freshness","name":"Orders Table Freshness","id":"3f1c0a52-8d1e-4b7a-9c52-6a1f0e2d7b10"}],"updated":[],"deleted":[],"unchanged":4},"sql_tests":{"created":[],"updated":[],"deleted":[],"unchanged":0},"deployment_rules":{"created":[],"updated":[],"deleted":[],"unchanged":0},"sql_test_deployment_rules":{"created":[],"updated":[],"deleted":[],"unchanged":0},"validation_errors":0,"cancelled":false}}
+```
+
+Each entry has these keys:
+
+- `path`: the resource path of the asset the check is on. It is empty when the asset has no path, and for a rule that selects by query or by data product.
+- `identifier`: the asset's identifier as compact JSON. It is present only when the asset is not given by a path.
+- `type`: the monitor type (the same name as in the YAML), the SQL test type, or for a rule how it selects (`query`, `static`, `exclusive_query`, `exclusive_static`, `product`).
+- `name`: the name of the monitor or test, or the title of a rule. It can be empty for a rule that selects one asset. For a rule that selects a data product and has no title, it is the product id.
+- `query`: the selection of a rule. It is present only for a rule that selects by query.
+- `id`: the id of the check or rule.
+
+A `deleted` entry describes the item as it is now in the workspace. An `updated` entry describes it as your config declares it. A monitor that is replaced appears in `deleted` under its old id and in `created` under its new id.
+
 ---
 
 ### Advisor

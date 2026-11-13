@@ -394,7 +394,7 @@ Client credentials come before a cached login, so the last person who logged in 
 - Select the deployment by name: `--region eu|us|au`, or `--endpoint` for a self-hosted one. `synqcli auth login` remembers the choice, and `synqcli auth use <region>` changes it, so later commands need no flag.
 - A wrong region is the most expensive mistake here. It reconciles a workspace that does not declare your checks, and to reconcile means to delete.
 - Confirm the target before you write. Every `deploy` and `export` prints the workspace that it connected to before it does anything. Read that line.
-- Set `--log-file` or `$QUALITY_LOG_FILE` to get a JSONL execution log: one record per phase, per namespace result and per error. Parse this log, not the formatted output.
+- Set `--log-file` or `$QUALITY_LOG_FILE` to get a JSONL execution log: one record per phase, per namespace result and per error. Parse this log, not the formatted output. The checks that changed are listed in each `namespace_result` record, see "Execution log" in the [README](README.md).
 - Exit code `0` means the command did what it said. `1` means it did not: a failed deploy or export, and also a mistyped flag, an unknown command, a missing argument, or an unusable `--region` / `--endpoint`. So a CI step that checks the status also catches an invocation that an older `synqcli` does not understand.
 - A cancelled namespace is not a failure: a declined prompt exits `0`. `--dry-run` also exits `0`, with or without changes. If a CI gate needs "nothing to deploy", read the log file, not the status.
 
