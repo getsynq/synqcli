@@ -136,6 +136,35 @@ or self-hosted deployment.
 pre-issued `QUALITY_TOKEN` > the cached browser login. The CI paths deliberately win,
 so adding a browser login cannot change what an existing pipeline authenticates as.
 
+#### API client permissions
+
+An API client used for CI needs these permissions in Coalesce Quality:
+
+| Command | Permissions |
+|---|---|
+| `synqcli deploy --dry-run` and `synqcli deploy` | Read Monitors, Read SQL Tests or Edit SQL Tests, Edit Automatic Monitors, Read Entities or Edit Entities |
+| `synqcli deploy` that creates, changes or deletes monitors | also Edit Custom Monitors |
+| `synqcli deploy` that creates, changes or deletes SQL tests or their deployment rules | Edit SQL Tests instead of Read SQL Tests |
+
+Every deploy needs the read permissions, also a `--dry-run`, because it first plans the changes.
+The plan needs Edit Automatic Monitors even when your config has no deployment rules.
+The plan lists SQL tests too, so it needs Read SQL Tests or Edit SQL Tests even when the config has none.
+It needs Read Entities to resolve the entities your config names.
+A deploy that only creates or changes monitors also works with Edit Custom SQL Monitors
+instead of Edit Custom Monitors. A deploy that deletes a monitor needs Edit Custom Monitors.
+A monitor with a `sql_source` also needs Edit Custom SQL Monitors.
+
+When the token of a client credential or `QUALITY_TOKEN` lacks one of these,
+`synqcli deploy` lists every missing permission in a highlighted block at the end of a
+`--dry-run`, before the confirmation of a deploy, at the end of a deploy with nothing
+to apply, and again at the end of a failed deploy. A deploy checks the edit permissions only for the changes its plan has, so a
+deploy with nothing to apply checks only the read permissions. It writes the same list
+to `--log-file` and carries on. The command itself is never blocked by this check.
+
+A permission cannot be added to an existing client. Create a new client with the
+Coalesce Quality CLI package under Settings > API > Add client, replace the client id and secret
+in your CI secrets, then delete the old client.
+
 ### Advisor Credentials
 
 The `advisor` command calls an OpenAI-compatible API. Set `OPENAI_API_KEY`:
